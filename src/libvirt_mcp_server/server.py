@@ -140,8 +140,11 @@ class LibvirtMCPServer:
             "undefine_network",
             "list_storage_pools",
             "get_storage_pool",
+            "get_storage_pool_xml",
+            "get_storage_pool_metadata",
             "list_storage_volumes",
             "get_storage_volume",
+            "get_storage_volume_metadata",
             "define_storage_pool_xml",
             "start_storage_pool",
             "destroy_storage_pool",
@@ -420,6 +423,22 @@ class LibvirtMCPServer:
                     pool_name=data.pool_name,
                     hypervisor_ref=data.hypervisor_ref,
                 )
+            elif tool_name == "get_storage_pool_xml":
+                data = StoragePoolRefInput.model_validate(args)
+                result = storage_tools.get_storage_pool_xml(
+                    self.config,
+                    self.libvirt_adapter,
+                    pool_name=data.pool_name,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_storage_pool_metadata":
+                data = StoragePoolRefInput.model_validate(args)
+                result = storage_tools.get_storage_pool_metadata(
+                    self.config,
+                    self.libvirt_adapter,
+                    pool_name=data.pool_name,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
             elif tool_name == "list_storage_volumes":
                 data = StoragePoolRefInput.model_validate(args)
                 result = storage_tools.list_storage_volumes(
@@ -431,6 +450,15 @@ class LibvirtMCPServer:
             elif tool_name == "get_storage_volume":
                 data = StorageVolumeRefInput.model_validate(args)
                 result = storage_tools.get_storage_volume(
+                    self.config,
+                    self.libvirt_adapter,
+                    pool_name=data.pool_name,
+                    volume_name=data.volume_name,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_storage_volume_metadata":
+                data = StorageVolumeRefInput.model_validate(args)
+                result = storage_tools.get_storage_volume_metadata(
                     self.config,
                     self.libvirt_adapter,
                     pool_name=data.pool_name,

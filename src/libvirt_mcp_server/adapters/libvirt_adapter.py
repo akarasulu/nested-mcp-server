@@ -419,6 +419,26 @@ class LibvirtAdapter:
             "available": int(info[3]),
         }
 
+    def get_storage_pool_xml(self, uri: str, pool_name: str) -> dict[str, Any]:
+        pool = self._lookup_storage_pool(uri, pool_name)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pool_name": pool_name,
+            "xml": pool.XMLDesc(0),
+        }
+
+    def get_storage_pool_metadata(self, uri: str, pool_name: str) -> dict[str, Any]:
+        pool = self._lookup_storage_pool(uri, pool_name)
+        xml = pool.XMLDesc(0)
+        root = ET.fromstring(xml)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pool_name": pool_name,
+            **self._parse_storage_pool_metadata_xml(root),
+        }
+
     def list_storage_volumes(self, uri: str, pool_name: str) -> list[dict[str, Any]]:
         conn = self._connect(uri)
         try:
@@ -449,16 +469,7 @@ class LibvirtAdapter:
         return out
 
     def get_storage_volume(self, uri: str, pool_name: str, volume_name: str) -> dict[str, Any]:
-        conn = self._connect(uri)
-        try:
-            pool = conn.storagePoolLookupByName(pool_name)
-        except Exception as exc:
-            raise MCPError(
-                code="STORAGE_POOL_NOT_FOUND",
-                message=f"Storage pool '{pool_name}' was not found",
-                retryable=False,
-                details={"pool_name": pool_name, "source": "libvirt", "cause": str(exc)},
-            )
+        pool = self._lookup_storage_pool(uri, pool_name)
 
         try:
             volume = pool.storageVolLookupByName(volume_name)
@@ -480,6 +491,18 @@ class LibvirtAdapter:
             "type": int(info[0]),
             "capacity": int(info[1]),
             "allocation": int(info[2]),
+        }
+
+    def get_storage_volume_metadata(self, uri: str, pool_name: str, volume_name: str) -> dict[str, Any]:
+        volume = self._lookup_storage_volume(uri, pool_name, volume_name)
+        xml = volume.XMLDesc(0)
+        root = ET.fromstring(xml)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            **self._parse_storage_volume_metadata_xml(root),
         }
 
     def get_network(self, uri: str, network_name: str) -> dict[str, Any]:
@@ -2192,6 +2215,30 @@ class LibvirtAdapter:
                 details={"domain_ref": domain_ref, "source": "libvirt", "cause": str(exc)},
             )
 
+    def _lookup_storage_pool(self, uri: str, pool_name: str) -> Any:
+        conn = self._connect(uri)
+        try:
+            return conn.storagePoolLookupByName(pool_name)
+        except Exception as exc:
+            raise MCPError(
+                code="STORAGE_POOL_NOT_FOUND",
+                message=f"Storage pool '{pool_name}' was not found",
+                retryable=False,
+                details={"pool_name": pool_name, "source": "libvirt", "cause": str(exc)},
+            )
+
+    def _lookup_storage_volume(self, uri: str, pool_name: str, volume_name: str) -> Any:
+        pool = self._lookup_storage_pool(uri, pool_name)
+        try:
+            return pool.storageVolLookupByName(volume_name)
+        except Exception as exc:
+            raise MCPError(
+                code="STORAGE_VOLUME_NOT_FOUND",
+                message=f"Storage volume '{volume_name}' was not found in pool '{pool_name}'",
+                retryable=False,
+                details={"pool_name": pool_name, "volume_name": volume_name, "source": "libvirt", "cause": str(exc)},
+            )
+
     def _domain_summary(self, dom: Any) -> dict[str, Any]:
         info = dom.info()
         state = _LIBVIRT_STATE.get(int(info[0]), "unknown")
@@ -2281,6 +2328,32 @@ class LibvirtAdapter:
             for cell in cells
         ]
 
+    def _parse_storage_pool_metadata_xml(self, root: ET.Element) -> dict[str, Any]:
+        target = root.find("target")
+        source = root.find("source")
+        return {
+            "pool_type": root.get("type"),
+            "name": _child_text(root, "name"),
+            "uuid": _child_text(root, "uuid"),
+            "target_path": _child_text(target, "path") if target is not None else None,
+            "pool_source": _storage_source_summary(source),
+            **_metadata_payload(root.find("metadata")),
+        }
+
+    def _parse_storage_volume_metadata_xml(self, root: ET.Element) -> dict[str, Any]:
+        target = root.find("target")
+        backing_store = root.find("backingStore")
+        return {
+            "volume_type": root.get("type"),
+            "name": _child_text(root, "name"),
+            "key": _child_text(root, "key"),
+            "capacity_bytes": _memory_to_bytes(_child_text(root, "capacity"), _child_attr(root, "capacity", "unit")),
+            "allocation_bytes": _memory_to_bytes(_child_text(root, "allocation"), _child_attr(root, "allocation", "unit")),
+            "target": _storage_target_summary(target),
+            "backing_store": _storage_backing_summary(backing_store),
+            **_metadata_payload(root.find("metadata")),
+        }
+
     def _summarize_capabilities(self, capabilities_xml: str) -> dict[str, Any]:
         try:
             root = ET.fromstring(capabilities_xml)
@@ -2359,3 +2432,102 @@ def _memory_to_kib(value: str | None, unit: str | None) -> int | None:
     if normalized in {"b", "bytes"}:
         return amount // 1024
     return amount
+
+
+def _memory_to_bytes(value: str | None, unit: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        amount = int(value)
+    except ValueError:
+        return None
+    normalized = (unit or "bytes").lower()
+    if normalized in {"b", "bytes"}:
+        return amount
+    if normalized in {"k", "kb", "kib", "kilobytes"}:
+        return amount * 1024
+    if normalized in {"m", "mb", "mib", "megabytes"}:
+        return amount * 1024 * 1024
+    if normalized in {"g", "gb", "gib", "gigabytes"}:
+        return amount * 1024 * 1024 * 1024
+    return amount
+
+
+def _child_text(root: ET.Element | None, tag: str) -> str | None:
+    if root is None:
+        return None
+    child = root.find(tag)
+    if child is None or child.text is None:
+        return None
+    text = child.text.strip()
+    return text or None
+
+
+def _child_attr(root: ET.Element | None, tag: str, attr: str) -> str | None:
+    if root is None:
+        return None
+    child = root.find(tag)
+    return child.get(attr) if child is not None else None
+
+
+def _metadata_payload(metadata: ET.Element | None) -> dict[str, Any]:
+    if metadata is None:
+        return {
+            "has_metadata": False,
+            "metadata_xml": None,
+            "metadata_namespaces": [],
+            "metadata_element_count": 0,
+        }
+    children = list(metadata)
+    namespaces = sorted({_namespace_from_tag(child.tag) for child in children if _namespace_from_tag(child.tag)})
+    return {
+        "has_metadata": bool(children),
+        "metadata_xml": ET.tostring(metadata, encoding="unicode"),
+        "metadata_namespaces": namespaces,
+        "metadata_element_count": len(children),
+    }
+
+
+def _namespace_from_tag(tag: str) -> str | None:
+    if tag.startswith("{") and "}" in tag:
+        return tag[1:].split("}", 1)[0]
+    return None
+
+
+def _storage_source_summary(source: ET.Element | None) -> dict[str, Any] | None:
+    if source is None:
+        return None
+    devices = [device.get("path") for device in source.findall("device") if device.get("path")]
+    hosts = [
+        {"name": host.get("name"), "port": host.get("port")}
+        for host in source.findall("host")
+        if host.get("name") or host.get("port")
+    ]
+    return {
+        "name": _child_text(source, "name"),
+        "format": _child_attr(source, "format", "type"),
+        "dir": _child_attr(source, "dir", "path"),
+        "adapter": _child_attr(source, "adapter", "name"),
+        "devices": devices,
+        "hosts": hosts,
+    }
+
+
+def _storage_target_summary(target: ET.Element | None) -> dict[str, Any] | None:
+    if target is None:
+        return None
+    return {
+        "path": _child_text(target, "path"),
+        "format": _child_attr(target, "format", "type"),
+        "compat": _child_attr(target, "compat", "type"),
+        "features": [child.tag for child in target.findall("./features/*")],
+    }
+
+
+def _storage_backing_summary(backing_store: ET.Element | None) -> dict[str, Any] | None:
+    if backing_store is None or len(backing_store) == 0 and not (backing_store.text or "").strip():
+        return None
+    return {
+        "path": _child_text(backing_store, "path"),
+        "format": _child_attr(backing_store, "format", "type"),
+    }

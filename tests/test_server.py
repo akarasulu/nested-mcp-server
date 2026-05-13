@@ -46,6 +46,9 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
     assert "set_domain_numa_topology" in tools
     assert "define_network_xml" in tools
     assert "define_storage_pool_xml" in tools
+    assert "get_storage_pool_xml" in tools
+    assert "get_storage_pool_metadata" in tools
+    assert "get_storage_volume_metadata" in tools
     assert "create_storage_volume_xml" in tools
     assert "create_linked_clone_volume" in tools
     assert "upload_storage_volume" in tools
@@ -169,6 +172,24 @@ def test_linked_clone_success_audit_includes_backing_details(tmp_path: Path, mon
             {"pool_name": "pool0", "volume_name": "vol0"},
             "libvirt_mcp_server.tools.storage_tools",
             "get_volume_xml",
+        ),
+        (
+            "get_storage_pool_xml",
+            {"pool_name": "pool0"},
+            "libvirt_mcp_server.tools.storage_tools",
+            "get_storage_pool_xml",
+        ),
+        (
+            "get_storage_pool_metadata",
+            {"pool_name": "pool0"},
+            "libvirt_mcp_server.tools.storage_tools",
+            "get_storage_pool_metadata",
+        ),
+        (
+            "get_storage_volume_metadata",
+            {"pool_name": "pool0", "volume_name": "vol0"},
+            "libvirt_mcp_server.tools.storage_tools",
+            "get_storage_volume_metadata",
         ),
         (
             "get_volume_backing_chain",

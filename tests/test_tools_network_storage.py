@@ -25,6 +25,18 @@ class FakeLibvirtAdapter:
         self.last = ("create_storage_volume_xml", uri, pool_name, volume_xml)
         return {"source": "libvirt", "status": "created", "pool_name": pool_name}
 
+    def get_storage_pool_xml(self, uri, pool_name):
+        self.last = ("get_storage_pool_xml", uri, pool_name)
+        return {"source": "libvirt", "pool_name": pool_name, "xml": "<pool/>"}
+
+    def get_storage_pool_metadata(self, uri, pool_name):
+        self.last = ("get_storage_pool_metadata", uri, pool_name)
+        return {"source": "libvirt", "pool_name": pool_name, "has_metadata": False}
+
+    def get_storage_volume_metadata(self, uri, pool_name, volume_name):
+        self.last = ("get_storage_volume_metadata", uri, pool_name, volume_name)
+        return {"source": "libvirt", "pool_name": pool_name, "volume_name": volume_name, "has_metadata": True}
+
     def upload_storage_volume(self, uri, pool_name, volume_name, source_path, *, offset, length):
         self.last = ("upload_storage_volume", uri, pool_name, volume_name, source_path, offset, length)
         return {
@@ -154,6 +166,45 @@ def test_create_storage_volume_xml_allows_prefixed_names(config):
 
     assert result["status"] == "created"
     assert result["pool_name"] == "mcp_test_pool"
+
+
+def test_get_storage_pool_xml_is_readonly(config):
+    adapter = FakeLibvirtAdapter()
+    config.allow_mutations = False
+
+    result = storage_tools.get_storage_pool_xml(config, adapter, pool_name="pool0", hypervisor_ref=None)
+
+    assert result["xml"] == "<pool/>"
+    assert result["hypervisor_ref"] == "default"
+    assert adapter.last == ("get_storage_pool_xml", "qemu:///system", "pool0")
+
+
+def test_get_storage_pool_metadata_is_readonly(config):
+    adapter = FakeLibvirtAdapter()
+    config.allow_mutations = False
+
+    result = storage_tools.get_storage_pool_metadata(config, adapter, pool_name="pool0", hypervisor_ref=None)
+
+    assert result["has_metadata"] is False
+    assert result["hypervisor_ref"] == "default"
+    assert adapter.last == ("get_storage_pool_metadata", "qemu:///system", "pool0")
+
+
+def test_get_storage_volume_metadata_is_readonly(config):
+    adapter = FakeLibvirtAdapter()
+    config.allow_mutations = False
+
+    result = storage_tools.get_storage_volume_metadata(
+        config,
+        adapter,
+        pool_name="pool0",
+        volume_name="vol0",
+        hypervisor_ref=None,
+    )
+
+    assert result["has_metadata"] is True
+    assert result["hypervisor_ref"] == "default"
+    assert adapter.last == ("get_storage_volume_metadata", "qemu:///system", "pool0", "vol0")
 
 
 def test_create_linked_clone_volume_rejects_absolute_backing_when_relative_required(config):

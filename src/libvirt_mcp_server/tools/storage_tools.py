@@ -38,6 +38,32 @@ def get_storage_pool(
     return payload
 
 
+def get_storage_pool_xml(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    pool_name: str,
+    hypervisor_ref: str | None,
+) -> dict:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_storage_pool_xml(uri, pool_name)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def get_storage_pool_metadata(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    pool_name: str,
+    hypervisor_ref: str | None,
+) -> dict:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_storage_pool_metadata(uri, pool_name)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 def list_storage_volumes(
     config: ServerConfig,
     libvirt_adapter: LibvirtAdapter,
@@ -68,6 +94,20 @@ def get_storage_volume(
     uri = config.get_hypervisor_uri(hypervisor_ref)
     payload = libvirt_adapter.get_storage_volume(uri, pool_name, volume_name)
     payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def get_storage_volume_metadata(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    pool_name: str,
+    volume_name: str,
+    hypervisor_ref: str | None,
+) -> dict:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_storage_volume_metadata(uri, pool_name, volume_name)
     payload["hypervisor_ref"] = hypervisor_ref or "default"
     return payload
 

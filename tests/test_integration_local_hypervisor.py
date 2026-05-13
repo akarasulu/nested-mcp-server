@@ -68,6 +68,14 @@ def test_local_hypervisor_readonly_smoke():
         assert "error" not in pool
         assert pool["name"] == pool_name
 
+        pool_xml = asyncio.run(server.call_tool("get_storage_pool_xml", {"pool_name": pool_name}))
+        assert "error" not in pool_xml
+        assert "<pool" in pool_xml["xml"]
+
+        pool_metadata = asyncio.run(server.call_tool("get_storage_pool_metadata", {"pool_name": pool_name}))
+        assert "error" not in pool_metadata
+        assert "has_metadata" in pool_metadata
+
         # Try to list volumes, but skip if pool is not active
         volumes = asyncio.run(server.call_tool("list_storage_volumes", {"pool_name": pool_name}))
         if "error" not in volumes and volumes.get("items"):
@@ -80,6 +88,15 @@ def test_local_hypervisor_readonly_smoke():
             )
             assert "error" not in vol
             assert vol["name"] == vol_name
+
+            vol_metadata = asyncio.run(
+                server.call_tool(
+                    "get_storage_volume_metadata",
+                    {"pool_name": pool_name, "volume_name": vol_name},
+                )
+            )
+            assert "error" not in vol_metadata
+            assert "has_metadata" in vol_metadata
 
     if domains.get("items"):
         domain_ref = domains["items"][0]["name"]

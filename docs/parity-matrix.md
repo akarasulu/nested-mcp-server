@@ -45,6 +45,7 @@ Implemented strongly:
 - CPU and emulator pinning
 - Host and guest NUMA topology inspection plus persistent guest NUMA placement updates
 - Storage volume resize and wipe
+- Storage pool/volume XML and metadata inspection
 - Storage pool build
 - QMP CPU/memory device controls, block mirror, dirty bitmaps, netdev/chardev hotplug
 - QMP migration telemetry (read-only)
@@ -59,7 +60,7 @@ Not yet parity-level:
 
 **Operator parity coverage: 90%**
 
-This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus partial Phase C coverage through storage upload/download, QMP migration telemetry, and persistent NUMA topology controls.
+This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus partial Phase C coverage through storage upload/download, storage metadata inspection, QMP migration telemetry, and persistent NUMA topology controls.
 
 ## Matrix
 
@@ -79,8 +80,8 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 | Network | Network lifecycle and definition | Implemented | define_network_xml, start_network, destroy_network, undefine_network, set_network_autostart | Add update/change operations | P2 |
 | Network | Host interfaces | Implemented | list_interfaces, get_interface, define_interface_xml, start_interface, stop_interface, undefine_interface | Add interface cloning and bridge management | P3 |
 | Network | Network filters | Implemented | list_nwfilters, get_nwfilter, define_nwfilter_xml, undefine_nwfilter | Add filter reference resolution and binding status | P3 |
-| Storage | Pool inspect and lifecycle | Implemented | list_storage_pools, get_storage_pool, define_storage_pool_xml, start_storage_pool, destroy_storage_pool, undefine_storage_pool, set_storage_pool_autostart, refresh_storage_pool, build_storage_pool | Add type-specific settings | P1 |
-| Storage | Volume inspect and lifecycle | Implemented | list_storage_volumes, get_storage_volume, create_storage_volume_xml, delete_storage_volume, clone_storage_volume, resize_storage_volume, wipe_storage_volume, upload_storage_volume, download_storage_volume | Add metadata operations | P1 |
+| Storage | Pool inspect and lifecycle | Implemented | list_storage_pools, get_storage_pool, get_storage_pool_xml, get_storage_pool_metadata, define_storage_pool_xml, start_storage_pool, destroy_storage_pool, undefine_storage_pool, set_storage_pool_autostart, refresh_storage_pool, build_storage_pool | Add type-specific settings | P1 |
+| Storage | Volume inspect and lifecycle | Implemented | list_storage_volumes, get_storage_volume, get_storage_volume_metadata, create_storage_volume_xml, delete_storage_volume, clone_storage_volume, resize_storage_volume, wipe_storage_volume, upload_storage_volume, download_storage_volume | Add mutable metadata update support only where libvirt exposes a safe update path | P1 |
 | Storage | Linked clone management | Implemented | create_linked_clone_volume, get_volume_xml, get_volume_backing_chain | Add parent resolution by volume identity, rebase/commit chain workflows | P1 |
 | Host devices | Node device and passthrough management | Implemented | list_node_devices, get_node_device, detach_node_device, reattach_node_device | Add full MDEV/VFIO mediated device workflows | P2 |
 | Policy | Mutation and destructive controls | Implemented | allow_mutations, allow_define, allow_destructive, allowlists, test prefix checks | Add per-family policy scopes and policy introspection resources | P1 |
@@ -127,6 +128,7 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 
 - Migration workflows (explicitly out of scope).
 - Storage volume upload/download: done.
+- Storage pool/volume metadata inspection: done.
 - Persistent NUMA topology and placement controls: done.
 - Block backup and NBD export integration: planned.
 - Durable QMP event replay controls: planned.
@@ -142,8 +144,8 @@ When a new feature ships:
 
 ## Suggested next parity targets
 
-1. Storage metadata operations.
-2. Block backup and NBD export integration.
-3. Durable QMP event replay controls.
-4. Per-family policy scopes and policy introspection resources.
+1. Block backup and NBD export integration.
+2. Durable QMP event replay controls.
+3. Per-family policy scopes and policy introspection resources.
+4. Mutable storage metadata update support only where libvirt exposes a safe update path.
 5. Live NUMA reshaping only where libvirt/QEMU support it safely.

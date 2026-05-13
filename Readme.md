@@ -6,14 +6,14 @@ Python MCP server for libvirt and QEMU/QMP virtualization operations.
 
 **Operator parity coverage: 90%**
 
-Phase A and Phase B are complete. Phase C is partially underway with storage upload/download, QMP migration telemetry, and persistent NUMA topology controls already implemented. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
+Phase A and Phase B are complete. Phase C is partially underway with storage upload/download, storage metadata inspection, QMP migration telemetry, and persistent NUMA topology controls already implemented. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
 
 ## What It Exposes
 
 - Host and multi-hypervisor discovery
 - Domain inspection, lifecycle, XML management, statistics, pinning, and persistent NUMA topology
 - Snapshot and checkpoint lifecycle
-- Network, storage pool, and storage volume management
+- Network, storage pool, and storage volume management with XML and metadata inspection
 - Storage volume clone, linked clone, resize, wipe, upload, and download flows
 - Host interfaces, network filters, node devices, and passthrough controls
 - QMP command bridge with allowlist policy, typed QMP query/control helpers, and event collection

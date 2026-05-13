@@ -210,6 +210,24 @@ async def get_storage_pool(pool_name: str, hypervisor_ref: str | None = None) ->
     return _render(result)
 
 
+@app.tool(description="Return storage pool XML.")
+async def get_storage_pool_xml(pool_name: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_storage_pool_xml",
+        {"pool_name": pool_name, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
+@app.tool(description="Return normalized storage pool metadata from libvirt XML.")
+async def get_storage_pool_metadata(pool_name: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_storage_pool_metadata",
+        {"pool_name": pool_name, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
 @app.tool(description="List all storage volumes in a storage pool.")
 async def list_storage_volumes(pool_name: str, hypervisor_ref: str | None = None) -> str:
     result = await _get_server().call_tool(
@@ -223,6 +241,15 @@ async def list_storage_volumes(pool_name: str, hypervisor_ref: str | None = None
 async def get_storage_volume(pool_name: str, volume_name: str, hypervisor_ref: str | None = None) -> str:
     result = await _get_server().call_tool(
         "get_storage_volume",
+        {"pool_name": pool_name, "volume_name": volume_name, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
+@app.tool(description="Return normalized storage volume metadata from libvirt XML.")
+async def get_storage_volume_metadata(pool_name: str, volume_name: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_storage_volume_metadata",
         {"pool_name": pool_name, "volume_name": volume_name, "hypervisor_ref": hypervisor_ref},
     )
     return _render(result)

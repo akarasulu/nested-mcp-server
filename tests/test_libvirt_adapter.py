@@ -87,6 +87,87 @@ def test_get_storage_volume_not_found_branch(monkeypatch):
     assert exc.value.code == "STORAGE_VOLUME_NOT_FOUND"
 
 
+class _FakeXmlObject:
+    def __init__(self, xml: str):
+        self.xml = xml
+
+    def XMLDesc(self, _flags: int):
+        return self.xml
+
+
+class _FakePoolForMetadata(_FakeXmlObject):
+    def __init__(self, pool_xml: str, volume_xml: str):
+        super().__init__(pool_xml)
+        self.volume = _FakeXmlObject(volume_xml)
+
+    def storageVolLookupByName(self, _name: str):
+        return self.volume
+
+
+class _ConnStorageMetadata:
+    def __init__(self, pool_xml: str, volume_xml: str):
+        self.pool = _FakePoolForMetadata(pool_xml, volume_xml)
+
+    def storagePoolLookupByName(self, _pool_name: str):
+        return self.pool
+
+
+def test_get_storage_pool_metadata_parses_libvirt_xml(monkeypatch):
+    pool_xml = """
+<pool type='dir'>
+  <name>pool0</name>
+  <uuid>pool-uuid</uuid>
+  <source><dir path='/srv/images'/></source>
+  <target><path>/var/lib/libvirt/images</path></target>
+  <metadata xmlns:nested='https://example.invalid/nested'><nested:owner>ops</nested:owner></metadata>
+</pool>
+"""
+    adapter = LibvirtAdapter()
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: _ConnStorageMetadata(pool_xml, "<volume/>"))
+
+    result = adapter.get_storage_pool_metadata("qemu:///system", "pool0")
+
+    assert result["pool_type"] == "dir"
+    assert result["name"] == "pool0"
+    assert result["target_path"] == "/var/lib/libvirt/images"
+    assert result["pool_source"]["dir"] == "/srv/images"
+    assert result["has_metadata"] is True
+    assert result["metadata_element_count"] == 1
+    assert "https://example.invalid/nested" in result["metadata_namespaces"]
+
+
+def test_get_storage_volume_metadata_parses_target_and_backing(monkeypatch):
+    volume_xml = """
+<volume type='file'>
+  <name>vol0.qcow2</name>
+  <key>/var/lib/libvirt/images/vol0.qcow2</key>
+  <capacity unit='MiB'>64</capacity>
+  <allocation unit='bytes'>4096</allocation>
+  <target>
+    <path>/var/lib/libvirt/images/vol0.qcow2</path>
+    <format type='qcow2'/>
+    <features><lazy_refcounts/></features>
+  </target>
+  <backingStore>
+    <path>base.qcow2</path>
+    <format type='qcow2'/>
+  </backingStore>
+</volume>
+"""
+    adapter = LibvirtAdapter()
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: _ConnStorageMetadata("<pool/>", volume_xml))
+
+    result = adapter.get_storage_volume_metadata("qemu:///system", "pool0", "vol0.qcow2")
+
+    assert result["volume_type"] == "file"
+    assert result["capacity_bytes"] == 67108864
+    assert result["allocation_bytes"] == 4096
+    assert result["target"]["format"] == "qcow2"
+    assert result["target"]["features"] == ["lazy_refcounts"]
+    assert result["backing_store"] == {"path": "base.qcow2", "format": "qcow2"}
+    assert result["has_metadata"] is False
+
+
 class _DomainCreateFails:
     def snapshotCreateXML(self, _xml: str, _flags: int):
         raise RuntimeError("create-failed")
