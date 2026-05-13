@@ -307,6 +307,18 @@ class LibvirtMCPServer:
         ts = datetime.now(timezone.utc).isoformat()
 
         try:
+            if tool_name in self.list_tools() and not self.config.is_tool_allowed_for_actor(actor, tool_name):
+                roles = sorted(self.config.roles_for_actor(actor))
+                raise MCPError(
+                    code="PERMISSION_DENIED",
+                    message=f"Actor '{actor}' is not allowed to invoke tool '{tool_name}'",
+                    details={
+                        "actor": actor,
+                        "roles": roles,
+                        "tool_name": tool_name,
+                        "policy": "role_tool_allowlist",
+                    },
+                )
             if tool_name == "host_info":
                 result = host_tools.host_info(
                     self.config,

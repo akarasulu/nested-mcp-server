@@ -19,6 +19,43 @@ def test_unknown_tool_returns_error(tmp_path: Path):
     assert result["error"]["code"] == "UNKNOWN_TOOL"
 
 
+def test_actor_role_policy_denies_disallowed_tool(tmp_path: Path):
+    cfg = ServerConfig.from_env()
+    cfg.audit_log_path = str(tmp_path / "audit.log")
+    cfg.actor_role_map = {"viewer": {"read"}}
+    cfg.default_actor_roles = set()
+    cfg.role_tool_allowlist = {"read": {"host_info", "get_*", "list_*"}}
+    server = LibvirtMCPServer(config=cfg)
+
+    denied = asyncio.run(server.call_tool("destroy_domain", {"domain_ref": "vm1"}, actor="viewer"))
+    assert denied["error"]["code"] == "PERMISSION_DENIED"
+
+    line = Path(cfg.audit_log_path).read_text(encoding="utf-8").strip().splitlines()[-1]
+    record = json.loads(line)
+    assert record["actor"] == "viewer"
+    assert record["error_code"] == "PERMISSION_DENIED"
+    assert record["details"]["error"]["details"]["roles"] == ["read"]
+
+
+def test_actor_role_policy_allows_matching_pattern(tmp_path: Path, monkeypatch):
+    cfg = ServerConfig.from_env()
+    cfg.audit_log_path = str(tmp_path / "audit.log")
+    cfg.actor_role_map = {"viewer": {"read"}}
+    cfg.default_actor_roles = set()
+    cfg.role_tool_allowlist = {"read": {"host_info", "get_*", "list_*"}}
+    server = LibvirtMCPServer(config=cfg)
+
+    monkeypatch.setattr(
+        server.libvirt_adapter,
+        "host_info",
+        lambda _uri: {"source": "libvirt", "timestamp": "t", "uri": _uri, "capabilities_summary": {}},
+    )
+
+    allowed = asyncio.run(server.call_tool("host_info", {}, actor="viewer"))
+    assert "error" not in allowed
+    assert allowed["source"] == "libvirt"
+
+
 def test_audit_is_written_on_failure(tmp_path: Path):
     cfg = ServerConfig.from_env()
     cfg.audit_log_path = str(tmp_path / "audit.log")

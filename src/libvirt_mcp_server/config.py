@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import fnmatch
 import os
 from typing import Any
 
@@ -54,6 +55,21 @@ def _parse_hypervisors() -> dict[str, str]:
     return parsed
 
 
+def _env_mapping(name: str) -> dict[str, set[str]]:
+    raw = os.getenv(name, "")
+    parsed: dict[str, set[str]] = {}
+    for entry in raw.split(";"):
+        entry = entry.strip()
+        if not entry or "=" not in entry:
+            continue
+        key, values = entry.split("=", 1)
+        key = key.strip()
+        items = {item.strip() for item in values.split(",") if item.strip()}
+        if key and items:
+            parsed[key] = items
+    return parsed
+
+
 @dataclass(slots=True)
 class ServerConfig:
     libvirt_uri: str
@@ -69,6 +85,9 @@ class ServerConfig:
     allow_qmp: bool
     allow_uri_override: bool
     allow_secret_read: bool
+    actor_role_map: dict[str, set[str]]
+    default_actor_roles: set[str]
+    role_tool_allowlist: dict[str, set[str]]
 
     qmp_socket_dir: str
     qmp_allowlist: set[str]
@@ -100,6 +119,9 @@ class ServerConfig:
             allow_qmp=_env_bool("MCP_QMP_ENABLE", True),
             allow_uri_override=_env_bool("MCP_LIBVIRT_ALLOW_URI_OVERRIDE", False),
             allow_secret_read=_env_bool("MCP_LIBVIRT_ALLOW_SECRET_READ", False),
+            actor_role_map=_env_mapping("MCP_ACTOR_ROLES"),
+            default_actor_roles=set(_env_csv("MCP_DEFAULT_ACTOR_ROLES", "")),
+            role_tool_allowlist=_env_mapping("MCP_ROLE_TOOL_ALLOWLIST"),
             qmp_socket_dir=os.getenv("MCP_QMP_SOCKET_DIR", "/var/run/qemu-server"),
             qmp_allowlist=qmp_allowlist,
             qmp_mutation_allowlist=set(_env_csv(
@@ -132,9 +154,33 @@ class ServerConfig:
             "allow_qmp": self.allow_qmp,
             "allow_uri_override": self.allow_uri_override,
             "allow_secret_read": self.allow_secret_read,
+            "actor_policy_enabled": self.actor_policy_enabled(),
+            "actor_role_map": {actor: sorted(roles) for actor, roles in sorted(self.actor_role_map.items())},
+            "default_actor_roles": sorted(self.default_actor_roles),
+            "role_tool_allowlist": {
+                role: sorted(patterns) for role, patterns in sorted(self.role_tool_allowlist.items())
+            },
             "qmp_event_log_path": self.qmp_event_log_path,
             "qmp_event_retention_days": self.qmp_event_retention_days,
             "qmp_event_retention_max_records": self.qmp_event_retention_max_records,
             "test_resource_prefix": self.test_resource_prefix,
             "max_concurrent_operations": self.max_concurrent_operations,
         }
+
+    def actor_policy_enabled(self) -> bool:
+        return bool(self.role_tool_allowlist)
+
+    def roles_for_actor(self, actor: str) -> set[str]:
+        return set(self.actor_role_map.get(actor, self.default_actor_roles))
+
+    def is_tool_allowed_for_actor(self, actor: str, tool_name: str) -> bool:
+        if not self.actor_policy_enabled():
+            return True
+        roles = self.roles_for_actor(actor)
+        if not roles:
+            return False
+        for role in roles:
+            for pattern in self.role_tool_allowlist.get(role, set()):
+                if pattern == "*" or fnmatch.fnmatchcase(tool_name, pattern):
+                    return True
+        return False

@@ -111,6 +111,7 @@ def test_get_policy_scopes_reports_family_gates(cfg_readonly: ServerConfig):
     assert scopes["mutation"]["enabled"] is False
     assert scopes["mutation"]["policy_gate"] == "allow_mutations"
     assert "storage_lifecycle" in scopes["mutation"]["families"]
+    assert scopes["actor_roles"]["policy_gate"] == "role_tool_allowlist"
 
 
 def test_secret_get_value_requires_policy(cfg_readonly: ServerConfig):

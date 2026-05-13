@@ -183,6 +183,12 @@ def get_policy_scopes(config: ServerConfig) -> dict:
             "families": ["secret_value_read"],
             "policy_gate": "allow_secret_read",
         },
+        {
+            "scope": "actor_roles",
+            "enabled": config.actor_policy_enabled(),
+            "families": ["all_tools"],
+            "policy_gate": "role_tool_allowlist",
+        },
     ]
     return {
         "source": "server",
