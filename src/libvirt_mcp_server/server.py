@@ -23,6 +23,7 @@ from libvirt_mcp_server.schemas import (
     DomainDefineInput,
     DomainDiskRefInput,
     DomainInterfaceRefInput,
+    DomainNumaTuningInput,
     DomainNumaTopologyInput,
     DomainRefInput,
     DomainXmlInput,
@@ -65,6 +66,7 @@ from libvirt_mcp_server.schemas import (
     QmpPruneEventsInput,
     QmpReplayEventsInput,
     SetAutostartInput,
+    SetDomainNumaTuningInput,
     SetEmulatorPinInput,
     SetMemoryInput,
     SetNetworkAutostartInput,
@@ -240,6 +242,9 @@ class LibvirtMCPServer:
             "set_domain_memory",
             "get_domain_numa_topology",
             "set_domain_numa_topology",
+            "get_domain_numa_update_capabilities",
+            "get_domain_numa_tuning",
+            "set_domain_numa_tuning",
             # Domain statistics
             "get_domain_stats",
             "get_domain_block_stats",
@@ -1298,6 +1303,36 @@ class LibvirtMCPServer:
                     self.libvirt_adapter,
                     domain_ref=data.domain_ref,
                     cells=[cell.model_dump() for cell in data.cells],
+                    live=data.live,
+                    persistent=data.persistent,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_domain_numa_update_capabilities":
+                data = DomainRefInput.model_validate(args)
+                result = domain_tools.get_domain_numa_update_capabilities(
+                    self.config,
+                    self.libvirt_adapter,
+                    domain_ref=data.domain_ref,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_domain_numa_tuning":
+                data = DomainNumaTuningInput.model_validate(args)
+                result = domain_tools.get_domain_numa_tuning(
+                    self.config,
+                    self.libvirt_adapter,
+                    domain_ref=data.domain_ref,
+                    live=data.live,
+                    persistent=data.persistent,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "set_domain_numa_tuning":
+                data = SetDomainNumaTuningInput.model_validate(args)
+                result = domain_tools.set_domain_numa_tuning(
+                    self.config,
+                    self.libvirt_adapter,
+                    domain_ref=data.domain_ref,
+                    mode=data.mode,
+                    nodeset=data.nodeset,
                     live=data.live,
                     persistent=data.persistent,
                     hypervisor_ref=data.hypervisor_ref,

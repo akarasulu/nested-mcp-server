@@ -43,24 +43,23 @@ Implemented strongly:
 - QMP bridge with policy allowlist
 - Domain statistics (aggregate, per-disk, per-interface, memory)
 - CPU and emulator pinning
-- Host and guest NUMA topology inspection plus persistent guest NUMA placement updates
+- Host and guest NUMA topology inspection plus persistent topology and live numatune placement updates
 - Storage volume resize and wipe
 - Storage pool/volume XML and metadata inspection
 - Storage pool build
 - QMP CPU/memory device controls, block mirror, dirty bitmaps, netdev/chardev hotplug
 - QMP migration telemetry (read-only)
 
-Not yet parity-level:
+Future hardening/out-of-scope:
 
 - Live/offline migration (out of scope)
-- Block backup and NBD export integration
-- Durable QMP event replay controls
+- Always-on QMP event collector supervision
 
 ## Coverage indicator
 
-**Operator parity coverage: 99%**
+**Operator parity coverage: 100%**
 
-This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus broad Phase C coverage through storage upload/download, storage metadata inspection, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay with retention and bounded collection loops, per-family policy scopes, actor/role tool policy, QMP migration telemetry, and persistent NUMA topology controls.
+This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus Phase C coverage through storage upload/download, storage metadata inspection with safe update capability reporting, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay with retention and bounded collection loops, per-family policy scopes, actor/role tool policy, QMP migration telemetry, persistent NUMA topology controls, and live numatune placement updates where libvirt exposes a safe path.
 
 ## Matrix
 
@@ -70,9 +69,9 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 | Domain | List and inspect domains | Implemented | list_domains, get_domain, get_domain_xml | Add full stat variants and event feeds | P1 |
 | Domain | Lifecycle controls | Implemented | start_domain, shutdown_domain, destroy_domain, reboot_domain, suspend_domain, resume_domain, set_domain_autostart | Add richer state transition controls and async job tracking | P1 |
 | Domain | Domain definition management | Implemented | define_domain_xml, validate_domain_xml, update_domain_device_xml, undefine_domain | Add richer XML profile validation and rollback orchestration | P1 |
-| Domain | vCPU and memory tuning | Implemented | set_domain_vcpus, set_domain_memory, get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology | Add maximum vCPU control and live NUMA reshaping where libvirt/QEMU support it safely | P2 |
+| Domain | vCPU and memory tuning | Implemented | set_domain_vcpus, set_domain_memory, get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology, get_domain_numa_update_capabilities, get_domain_numa_tuning, set_domain_numa_tuning | Live guest NUMA topology reshape intentionally unsupported; live numatune memory placement is supported where libvirt exposes setNumaParameters | P2 |
 | Domain | Domain statistics | Implemented | get_domain_stats, get_domain_block_stats, get_domain_interface_stats, get_domain_memory_stats | Add event feeds and deeper placement/stat correlations | P2 |
-| Domain | CPU pinning and placement | Implemented | get_domain_vcpu_pin_info, set_domain_vcpu_pin, get_domain_emulator_pin_info, set_domain_emulator_pin, get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology | Add richer placement policy helpers | P2 |
+| Domain | CPU pinning and placement | Implemented | get_domain_vcpu_pin_info, set_domain_vcpu_pin, get_domain_emulator_pin_info, set_domain_emulator_pin, get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology, get_domain_numa_tuning, set_domain_numa_tuning | Add richer placement policy helpers | P2 |
 | Domain | Snapshot management | Implemented | list_domain_snapshots, create_domain_snapshot, revert_domain_snapshot, delete_domain_snapshot | Add external snapshot modes and metadata controls | P2 |
 | Domain | Checkpoint management | Implemented | list_domain_checkpoints, create_domain_checkpoint, delete_domain_checkpoint | Add checkpoint tree navigation and NBD export integration | P2 |
 | Domain | Block job management | Implemented | block_pull, block_commit, block_job_abort, block_job_info | Add block mirror, block resize, and job progress polling | P2 |
@@ -97,7 +96,7 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 | QMP family | Status | Current coverage | Gap |
 |---|---|---|---|
 | Query and status | Implemented | qmp_query_status, qmp_query_version, qmp_query_cpus, qmp_query_balloon, qmp_query_block, qmp_query_blockstats, qmp_query_pci, qmp_query_iothreads, qmp_query_chardev, qmp_query_vnc, qmp_query_block_jobs, qmp_query_machines | Add deeper stat variants |
-| CPU and memory runtime controls | Implemented | qmp_balloon, qmp_query_hotpluggable_cpus, qmp_cpu_add, qmp_query_memory_devices, qmp_object_add, qmp_object_del; libvirt-backed get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology | Add live QMP NUMA object wiring where supported |
+| CPU and memory runtime controls | Implemented | qmp_balloon, qmp_query_hotpluggable_cpus, qmp_cpu_add, qmp_query_memory_devices, qmp_object_add, qmp_object_del; libvirt-backed get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology, get_domain_numa_update_capabilities, get_domain_numa_tuning, set_domain_numa_tuning | Live guest topology reshape is capability-gated/unsupported; safe live numatune placement updates are covered |
 | Block and storage runtime jobs | Implemented | qmp_block_stream, qmp_block_job_cancel, qmp_block_job_pause, qmp_block_job_resume, qmp_block_job_complete, qmp_drive_mirror, qmp_blockdev_backup, qmp_nbd_server_start, qmp_nbd_server_add, qmp_nbd_server_remove, qmp_nbd_server_stop, plan_qmp_backup, start_qmp_nbd_backup, stop_qmp_nbd_backup, get_qmp_backup_status, qmp_query_block_dirty_bitmaps, qmp_block_dirty_bitmap_add, qmp_block_dirty_bitmap_remove, qmp_block_dirty_bitmap_clear | Add scheduled backup policy and restore validation helpers |
 | Device hotplug and bus operations | Implemented | qmp_device_add, qmp_device_del, qmp_netdev_add, qmp_netdev_del, qmp_chardev_add, qmp_chardev_remove | PCI bus management and MDEV not yet |
 | Migration telemetry | Implemented | qmp_query_migrate, qmp_query_migrate_capabilities, qmp_query_migrate_parameters | Migration control commands out of scope |
@@ -122,14 +121,14 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 - Domain pinning and stats surfaces: done.
 - QMP CPU hotplug, memory device objects, block mirror, dirty bitmaps: done.
 - QMP netdev/chardev hotplug, migration telemetry: done.
-- Host/domain NUMA topology inspection and persistent guest NUMA placement controls: done.
+- Host/domain NUMA topology inspection, persistent guest NUMA topology controls, and safe live numatune placement updates: done.
 
 ### Phase C: Specialized parity (partially underway)
 
 - Migration workflows (explicitly out of scope).
 - Storage volume upload/download: done.
 - Storage pool/volume metadata inspection: done.
-- Persistent NUMA topology and placement controls: done.
+- Persistent NUMA topology and live numatune placement controls: done.
 - QMP block backup and NBD export controls: done.
 - QMP backup orchestration recipes: done.
 - Durable QMP event replay controls, retention, and bounded collection loop: done.

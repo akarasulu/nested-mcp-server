@@ -411,6 +411,9 @@ def test_parse_domain_numa_xml():
 class _FakeDomainForNuma:
     def __init__(self):
         self.defined_xml = None
+        self.numa_params = {"numa_mode": 0, "numa_nodeset": "0"}
+        self.set_numa_params = None
+        self.set_numa_flags = None
 
     def XMLDesc(self, _flags):
         return """
@@ -420,6 +423,14 @@ class _FakeDomainForNuma:
   <vcpu>1</vcpu>
 </domain>
 """
+
+    def numaParameters(self, flags):
+        self.numa_flags = flags
+        return self.numa_params
+
+    def setNumaParameters(self, params, flags):
+        self.set_numa_params = params
+        self.set_numa_flags = flags
 
 
 class _FakeConnForNuma:
@@ -447,3 +458,56 @@ def test_set_domain_numa_topology_redefines_domain_xml(monkeypatch):
 
     assert result["status"] == "numa_topology_updated"
     assert "<numa><cell id=\"0\" cpus=\"0\" memory=\"1048576\" unit=\"KiB\" /></numa>" in conn.defined_xml
+
+
+def test_domain_numa_update_capabilities_reports_safe_boundary(monkeypatch):
+    adapter = LibvirtAdapter()
+    domain = _FakeDomainForNuma()
+    conn = _FakeConnForNuma(domain)
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+    monkeypatch.setattr(adapter, "_lookup_domain", lambda _conn, _ref: domain)
+
+    result = adapter.get_domain_numa_update_capabilities("qemu:///system", "mcp_test_vm1")
+
+    assert result["persistent_topology_update_supported"] is True
+    assert result["live_topology_update_supported"] is False
+    assert result["live_numatune_update_supported"] is True
+    assert "strict" in result["supported_numatune_modes"]
+
+
+def test_get_domain_numa_tuning_normalizes_parameters(monkeypatch):
+    adapter = LibvirtAdapter()
+    domain = _FakeDomainForNuma()
+    conn = _FakeConnForNuma(domain)
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+    monkeypatch.setattr(adapter, "_lookup_domain", lambda _conn, _ref: domain)
+
+    result = adapter.get_domain_numa_tuning("qemu:///system", "mcp_test_vm1", live=True, persistent=False)
+
+    assert result["mode"] == "strict"
+    assert result["mode_value"] == 0
+    assert result["nodeset"] == "0"
+    assert domain.numa_flags == 1
+
+
+def test_set_domain_numa_tuning_passes_libvirt_parameters(monkeypatch):
+    adapter = LibvirtAdapter()
+    domain = _FakeDomainForNuma()
+    conn = _FakeConnForNuma(domain)
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+    monkeypatch.setattr(adapter, "_lookup_domain", lambda _conn, _ref: domain)
+
+    result = adapter.set_domain_numa_tuning(
+        "qemu:///system",
+        "mcp_test_vm1",
+        mode="interleave",
+        nodeset="0-1",
+        live=True,
+        persistent=True,
+    )
+
+    assert result["status"] == "numa_tuning_updated"
+    assert result["mode"] == "interleave"
+    assert domain.set_numa_params["numa_mode"] == 2
+    assert domain.set_numa_params["numa_nodeset"] == "0-1"
+    assert domain.set_numa_flags == 3

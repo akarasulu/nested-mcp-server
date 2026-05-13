@@ -1335,6 +1335,57 @@ async def set_domain_numa_topology(
     return _render(result)
 
 
+@app.tool(description="Report safe NUMA update capabilities for a domain.")
+async def get_domain_numa_update_capabilities(domain_ref: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_domain_numa_update_capabilities",
+        {"domain_ref": domain_ref, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
+@app.tool(description="Return libvirt numatune memory placement settings for a domain.")
+async def get_domain_numa_tuning(
+    domain_ref: str,
+    live: bool = True,
+    persistent: bool = False,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "get_domain_numa_tuning",
+        {
+            "domain_ref": domain_ref,
+            "live": live,
+            "persistent": persistent,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Set libvirt numatune memory placement for a test-prefixed domain.")
+async def set_domain_numa_tuning(
+    domain_ref: str,
+    mode: str,
+    nodeset: str,
+    live: bool = True,
+    persistent: bool = False,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "set_domain_numa_tuning",
+        {
+            "domain_ref": domain_ref,
+            "mode": mode,
+            "nodeset": nodeset,
+            "live": live,
+            "persistent": persistent,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
 # ---------------------------------------------------------------------------
 # Domain definition management
 # ---------------------------------------------------------------------------

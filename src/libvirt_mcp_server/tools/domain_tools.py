@@ -397,6 +397,72 @@ def set_domain_numa_topology(
     return payload
 
 
+def get_domain_numa_update_capabilities(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    domain_ref: str,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_domain_numa_update_capabilities(uri, domain_ref)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def get_domain_numa_tuning(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    domain_ref: str,
+    live: bool = True,
+    persistent: bool = False,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_domain_numa_tuning(uri, domain_ref, live=live, persistent=persistent)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def set_domain_numa_tuning(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    domain_ref: str,
+    mode: str,
+    nodeset: str,
+    live: bool = True,
+    persistent: bool = False,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    _ensure_mutations_allowed(config, tool_name="set_domain_numa_tuning")
+    _ensure_domain_mutation_allowed(config, tool_name="set_domain_numa_tuning", domain_ref=domain_ref)
+    _ensure_test_prefix(config, tool_name="set_domain_numa_tuning", object_name=domain_ref)
+    if not live and not persistent:
+        raise MCPError(
+            code="INVALID_NUMA_TUNING_UPDATE",
+            message="live=true or persistent=true is required for set_domain_numa_tuning",
+            details={
+                "tool_name": "set_domain_numa_tuning",
+                "domain_ref": domain_ref,
+                "live": live,
+                "persistent": persistent,
+            },
+        )
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.set_domain_numa_tuning(
+        uri,
+        domain_ref,
+        mode=mode,
+        nodeset=nodeset,
+        live=live,
+        persistent=persistent,
+    )
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Domain statistics
 # ---------------------------------------------------------------------------

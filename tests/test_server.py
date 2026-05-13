@@ -90,6 +90,9 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
     assert "create_storage_volume_xml" in tools
     assert "create_linked_clone_volume" in tools
     assert "upload_storage_volume" in tools
+    assert "get_domain_numa_update_capabilities" in tools
+    assert "get_domain_numa_tuning" in tools
+    assert "set_domain_numa_tuning" in tools
     assert "download_storage_volume" in tools
     assert "qmp_blockdev_backup" in tools
     assert "qmp_nbd_server_start" in tools
@@ -206,6 +209,24 @@ def test_linked_clone_success_audit_includes_backing_details(tmp_path: Path, mon
             },
             "libvirt_mcp_server.tools.domain_tools",
             "set_domain_numa_topology",
+        ),
+        (
+            "get_domain_numa_update_capabilities",
+            {"domain_ref": "vm1"},
+            "libvirt_mcp_server.tools.domain_tools",
+            "get_domain_numa_update_capabilities",
+        ),
+        (
+            "get_domain_numa_tuning",
+            {"domain_ref": "vm1"},
+            "libvirt_mcp_server.tools.domain_tools",
+            "get_domain_numa_tuning",
+        ),
+        (
+            "set_domain_numa_tuning",
+            {"domain_ref": "mcp_test_vm1", "mode": "strict", "nodeset": "0"},
+            "libvirt_mcp_server.tools.domain_tools",
+            "set_domain_numa_tuning",
         ),
         (
             "update_domain_device_xml",

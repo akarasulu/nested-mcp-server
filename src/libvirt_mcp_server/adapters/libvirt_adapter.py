@@ -26,6 +26,14 @@ _LIBVIRT_STATE = {
 }
 
 
+_NUMATUNE_MODE_FALLBACKS = {
+    "strict": 0,
+    "preferred": 1,
+    "interleave": 2,
+    "restrictive": 3,
+}
+
+
 class LibvirtAdapter:
     def __init__(self) -> None:
         self._connections: dict[str, Any] = {}
@@ -203,6 +211,101 @@ class LibvirtAdapter:
             "status": "numa_topology_updated",
             "cells": self._normalize_domain_numa_cells(cells),
             "total_count": len(cells),
+        }
+
+    def get_domain_numa_update_capabilities(self, uri: str, domain_ref: str) -> dict[str, Any]:
+        conn = self._connect(uri)
+        self._lookup_domain(conn, domain_ref)
+        has_get = libvirt is not None and hasattr(getattr(libvirt, "virDomain", object), "numaParameters")
+        has_set = libvirt is not None and hasattr(getattr(libvirt, "virDomain", object), "setNumaParameters")
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "domain_ref": domain_ref,
+            "persistent_topology_update_supported": True,
+            "live_topology_update_supported": False,
+            "numatune_read_supported": has_get,
+            "live_numatune_update_supported": has_set,
+            "persistent_numatune_update_supported": has_set,
+            "supported_numatune_modes": self._numatune_supported_modes(),
+            "live_topology_update_reason": (
+                "libvirt/QEMU do not expose a generally safe live guest NUMA topology reshape path; "
+                "use live numatune memory placement updates where supported."
+            ),
+        }
+
+    def get_domain_numa_tuning(
+        self,
+        uri: str,
+        domain_ref: str,
+        *,
+        live: bool = True,
+        persistent: bool = False,
+    ) -> dict[str, Any]:
+        conn = self._connect(uri)
+        dom = self._lookup_domain(conn, domain_ref)
+        flags = self._domain_affect_flags(live=live, persistent=persistent)
+        try:
+            raw = dom.numaParameters(flags)
+        except Exception as exc:
+            raise MCPError(
+                code="DOMAIN_NUMA_TUNING_READ_FAILED",
+                message=f"Failed to read NUMA tuning for domain '{domain_ref}'",
+                retryable=False,
+                details={"domain_ref": domain_ref, "source": "libvirt", "cause": str(exc)},
+            )
+        normalized = self._normalize_numatune_parameters(raw)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "domain_ref": domain_ref,
+            "live": live,
+            "persistent": persistent,
+            **normalized,
+        }
+
+    def set_domain_numa_tuning(
+        self,
+        uri: str,
+        domain_ref: str,
+        *,
+        mode: str,
+        nodeset: str,
+        live: bool = True,
+        persistent: bool = False,
+    ) -> dict[str, Any]:
+        conn = self._connect(uri)
+        dom = self._lookup_domain(conn, domain_ref)
+        flags = self._domain_affect_flags(live=live, persistent=persistent)
+        mode_value = self._numatune_mode_value(mode)
+        mode_key = getattr(libvirt, "VIR_DOMAIN_NUMA_MODE", "numa_mode") if libvirt is not None else "numa_mode"
+        nodeset_key = getattr(libvirt, "VIR_DOMAIN_NUMA_NODESET", "numa_nodeset") if libvirt is not None else "numa_nodeset"
+        params = {mode_key: mode_value, nodeset_key: nodeset}
+        try:
+            dom.setNumaParameters(params, flags)
+        except Exception as exc:
+            raise MCPError(
+                code="DOMAIN_NUMA_TUNING_UPDATE_FAILED",
+                message=f"Failed to update NUMA tuning for domain '{domain_ref}'",
+                retryable=False,
+                details={
+                    "domain_ref": domain_ref,
+                    "mode": mode,
+                    "nodeset": nodeset,
+                    "source": "libvirt",
+                    "cause": str(exc),
+                },
+            )
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "domain_ref": domain_ref,
+            "status": "numa_tuning_updated",
+            "mode": self._numatune_mode_name(mode_value),
+            "mode_value": mode_value,
+            "nodeset": nodeset,
+            "live": live,
+            "persistent": persistent,
         }
 
     def define_domain_xml(self, uri: str, domain_xml: str) -> dict[str, Any]:
@@ -2235,6 +2338,69 @@ class LibvirtAdapter:
                 retryable=False,
                 details={"domain_ref": domain_ref, "source": "libvirt", "cause": str(exc)},
             )
+
+    def _domain_affect_flags(self, *, live: bool, persistent: bool) -> int:
+        flags = 0
+        if libvirt is not None:
+            if live:
+                flags |= getattr(libvirt, "VIR_DOMAIN_AFFECT_LIVE", 1)
+            if persistent:
+                flags |= getattr(libvirt, "VIR_DOMAIN_AFFECT_CONFIG", 2)
+            return flags
+        if live:
+            flags |= 1
+        if persistent:
+            flags |= 2
+        return flags
+
+    def _numatune_mode_value(self, mode: str) -> int:
+        normalized = mode.strip().lower().replace("-", "_")
+        constants = {
+            "strict": "VIR_DOMAIN_NUMATUNE_MEM_STRICT",
+            "preferred": "VIR_DOMAIN_NUMATUNE_MEM_PREFERRED",
+            "interleave": "VIR_DOMAIN_NUMATUNE_MEM_INTERLEAVE",
+            "restrictive": "VIR_DOMAIN_NUMATUNE_MEM_RESTRICTIVE",
+        }
+        if normalized not in constants:
+            raise MCPError(
+                code="INVALID_NUMA_TUNING_MODE",
+                message=f"Unsupported NUMA tuning mode '{mode}'",
+                retryable=False,
+                details={"mode": mode, "supported_modes": sorted(constants)},
+            )
+        if libvirt is not None and hasattr(libvirt, constants[normalized]):
+            return int(getattr(libvirt, constants[normalized]))
+        return _NUMATUNE_MODE_FALLBACKS[normalized]
+
+    def _numatune_mode_name(self, mode_value: Any) -> str | None:
+        try:
+            value = int(mode_value)
+        except (TypeError, ValueError):
+            return None
+        for name in self._numatune_supported_modes():
+            if self._numatune_mode_value(name) == value:
+                return name
+        return None
+
+    def _numatune_supported_modes(self) -> list[str]:
+        modes = []
+        for name, fallback in _NUMATUNE_MODE_FALLBACKS.items():
+            constant = f"VIR_DOMAIN_NUMATUNE_MEM_{name.upper()}"
+            if libvirt is None or hasattr(libvirt, constant):
+                modes.append(name)
+        return modes
+
+    def _normalize_numatune_parameters(self, raw: dict[str, Any]) -> dict[str, Any]:
+        mode_key = getattr(libvirt, "VIR_DOMAIN_NUMA_MODE", "numa_mode") if libvirt is not None else "numa_mode"
+        nodeset_key = getattr(libvirt, "VIR_DOMAIN_NUMA_NODESET", "numa_nodeset") if libvirt is not None else "numa_nodeset"
+        mode_value = raw.get(mode_key, raw.get("numa_mode"))
+        nodeset = raw.get(nodeset_key, raw.get("numa_nodeset"))
+        return {
+            "mode": self._numatune_mode_name(mode_value),
+            "mode_value": mode_value,
+            "nodeset": nodeset,
+            "parameters": {str(key): value for key, value in raw.items()},
+        }
 
     def _lookup_storage_pool(self, uri: str, pool_name: str) -> Any:
         conn = self._connect(uri)

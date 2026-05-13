@@ -615,3 +615,112 @@ def test_set_domain_numa_topology_allowed(cfg_mutations):
     assert result["status"] == "numa_topology_updated"
     assert result["persistent"] is True
     adapter.set_domain_numa_topology.assert_called_once()
+
+
+def test_get_domain_numa_update_capabilities_readonly(cfg_readonly):
+    adapter = _make_adapter(
+        get_domain_numa_update_capabilities={
+            "source": "libvirt",
+            "timestamp": "t",
+            "domain_ref": "vm1",
+            "live_topology_update_supported": False,
+            "live_numatune_update_supported": True,
+        }
+    )
+    result = domain_tools.get_domain_numa_update_capabilities(cfg_readonly, adapter, domain_ref="vm1")
+    assert result["live_topology_update_supported"] is False
+    assert result["live_numatune_update_supported"] is True
+    adapter.get_domain_numa_update_capabilities.assert_called_once_with(cfg_readonly.get_hypervisor_uri(None), "vm1")
+
+
+def test_get_domain_numa_tuning_readonly(cfg_readonly):
+    adapter = _make_adapter(
+        get_domain_numa_tuning={
+            "source": "libvirt",
+            "timestamp": "t",
+            "domain_ref": "vm1",
+            "mode": "strict",
+            "nodeset": "0",
+        }
+    )
+    result = domain_tools.get_domain_numa_tuning(cfg_readonly, adapter, domain_ref="vm1", live=True, persistent=False)
+    assert result["mode"] == "strict"
+    adapter.get_domain_numa_tuning.assert_called_once_with(
+        cfg_readonly.get_hypervisor_uri(None),
+        "vm1",
+        live=True,
+        persistent=False,
+    )
+
+
+def test_set_domain_numa_tuning_blocked_when_mutations_off(cfg_readonly):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_tuning(
+            cfg_readonly,
+            adapter,
+            domain_ref="mcp_test_vm1",
+            mode="strict",
+            nodeset="0",
+        )
+    assert exc.value.code == "MUTATION_DISABLED"
+    adapter.set_domain_numa_tuning.assert_not_called()
+
+
+def test_set_domain_numa_tuning_requires_test_prefix(cfg_mutations):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_tuning(
+            cfg_mutations,
+            adapter,
+            domain_ref="prod_vm1",
+            mode="strict",
+            nodeset="0",
+        )
+    assert exc.value.code == "TEST_PREFIX_REQUIRED"
+
+
+def test_set_domain_numa_tuning_requires_live_or_persistent(cfg_mutations):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_tuning(
+            cfg_mutations,
+            adapter,
+            domain_ref="mcp_test_vm1",
+            mode="strict",
+            nodeset="0",
+            live=False,
+            persistent=False,
+        )
+    assert exc.value.code == "INVALID_NUMA_TUNING_UPDATE"
+
+
+def test_set_domain_numa_tuning_allowed(cfg_mutations):
+    adapter = _make_adapter(
+        set_domain_numa_tuning={
+            "source": "libvirt",
+            "timestamp": "t",
+            "domain_ref": "mcp_test_vm1",
+            "status": "numa_tuning_updated",
+            "mode": "strict",
+            "nodeset": "0",
+        }
+    )
+    result = domain_tools.set_domain_numa_tuning(
+        cfg_mutations,
+        adapter,
+        domain_ref="mcp_test_vm1",
+        mode="strict",
+        nodeset="0",
+        live=True,
+        persistent=False,
+    )
+    assert result["status"] == "numa_tuning_updated"
+    adapter.set_domain_numa_tuning.assert_called_once_with(
+        cfg_mutations.get_hypervisor_uri(None),
+        "mcp_test_vm1",
+        mode="strict",
+        nodeset="0",
+        live=True,
+        persistent=False,
+    )

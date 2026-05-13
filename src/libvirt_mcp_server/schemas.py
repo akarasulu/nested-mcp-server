@@ -256,6 +256,16 @@ class DomainNumaTopologyInput(DomainRefInput):
     persistent: bool = True
 
 
+class DomainNumaTuningInput(DomainRefInput):
+    live: bool = True
+    persistent: bool = False
+
+
+class SetDomainNumaTuningInput(DomainNumaTuningInput):
+    mode: str = Field(min_length=1, max_length=32)
+    nodeset: str = Field(min_length=1, max_length=255)
+
+
 # ---------------------------------------------------------------------------
 # QMP new family schemas
 # ---------------------------------------------------------------------------

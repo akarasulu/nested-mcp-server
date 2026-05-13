@@ -4,14 +4,14 @@ Python MCP server for libvirt and QEMU/QMP virtualization operations.
 
 ## Coverage
 
-**Operator parity coverage: 99%**
+**Operator parity coverage: 100%**
 
-Phase A and Phase B are complete. Phase C is broadly covered with storage upload/download, storage metadata inspection, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay with retention and bounded collection loops, per-family policy scopes, actor/role tool policy, QMP migration telemetry, and persistent NUMA topology controls already implemented. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
+Phase A and Phase B are complete. Phase C is covered with storage upload/download, storage metadata inspection and safe update capability reporting, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay with retention and bounded collection loops, per-family policy scopes, actor/role tool policy, QMP migration telemetry, persistent NUMA topology controls, and live numatune placement updates where libvirt exposes a safe path. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
 
 ## What It Exposes
 
 - Host and multi-hypervisor discovery
-- Domain inspection, lifecycle, XML management, statistics, pinning, and persistent NUMA topology
+- Domain inspection, lifecycle, XML management, statistics, pinning, persistent NUMA topology, and live numatune placement
 - Snapshot and checkpoint lifecycle
 - Network, storage pool, and storage volume management with XML and metadata inspection
 - Storage metadata update capability reporting
@@ -55,4 +55,4 @@ Common environment variables:
 - `MCP_ROLE_TOOL_ALLOWLIST=admin=*;viewer=host_info,get_*,list_*`
 - `MCP_AUDIT_LOG_PATH=/var/log/libvirt-mcp/audit.log`
 
-See [AGENTS.md](AGENTS.md) for the original project specification and [docs/codex-handoff.md](docs/codex-handoff.md) for current implementation notes.
+See [AGENTS.md](AGENTS.md) for the original project specification.

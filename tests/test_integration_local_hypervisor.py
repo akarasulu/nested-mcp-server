@@ -160,6 +160,11 @@ def test_domain_introspection():
     assert "error" not in numa
     assert "numa_configured" in numa
 
+    numa_caps = asyncio.run(server.call_tool("get_domain_numa_update_capabilities", {"domain_ref": domain_ref}))
+    assert "error" not in numa_caps
+    assert numa_caps["live_topology_update_supported"] is False
+    assert "live_numatune_update_supported" in numa_caps
+
 
 def test_hypervisor_discovery():
     """Test hypervisor and host discovery operations."""
