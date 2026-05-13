@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+
+# Virtual environments and packaging output
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+
+# Coverage and test reports
+coverage*.xml
+htmlcov*/
+
+# Local runtime state
+audit.log
+*.log
+
+# Editor and local agent configuration
+.vscode/
+.idea/
+.agents/
+.codex/
+
+# OS/editor noise
+.DS_Store
+*~
+*.swp
