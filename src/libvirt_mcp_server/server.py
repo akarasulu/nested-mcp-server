@@ -36,6 +36,10 @@ from libvirt_mcp_server.schemas import (
     NWFilterDefineInput,
     NWFilterRefInput,
     QmpBalloonInput,
+    QmpBackupPlanInput,
+    QmpBackupStartInput,
+    QmpBackupStatusInput,
+    QmpBackupStopInput,
     QmpBitmapAddInput,
     QmpBitmapInput,
     QmpBlockJobCancelInput,
@@ -262,6 +266,10 @@ class LibvirtMCPServer:
             "qmp_nbd_server_add",
             "qmp_nbd_server_remove",
             "qmp_nbd_server_stop",
+            "plan_qmp_backup",
+            "start_qmp_nbd_backup",
+            "stop_qmp_nbd_backup",
+            "get_qmp_backup_status",
             "qmp_block_dirty_bitmap_add",
             "qmp_block_dirty_bitmap_remove",
             "qmp_block_dirty_bitmap_clear",
@@ -826,6 +834,62 @@ class LibvirtMCPServer:
                     self.config,
                     self.qmp_adapter,
                     domain_ref=data.domain_ref,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "plan_qmp_backup":
+                data = QmpBackupPlanInput.model_validate(args)
+                result = qmp_tools.plan_qmp_backup(
+                    self.config,
+                    domain_ref=data.domain_ref,
+                    device=data.device,
+                    export_name=data.export_name,
+                    address=data.address,
+                    bitmap=data.bitmap,
+                    writable=data.writable,
+                    backup_target=data.backup_target,
+                    sync=data.sync,
+                    job_id=data.job_id,
+                    speed=data.speed,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "start_qmp_nbd_backup":
+                data = QmpBackupStartInput.model_validate(args)
+                result = await qmp_tools.start_qmp_nbd_backup(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    device=data.device,
+                    export_name=data.export_name,
+                    address=data.address,
+                    bitmap=data.bitmap,
+                    writable=data.writable,
+                    backup_target=data.backup_target,
+                    sync=data.sync,
+                    job_id=data.job_id,
+                    speed=data.speed,
+                    cleanup_on_failure=data.cleanup_on_failure,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "stop_qmp_nbd_backup":
+                data = QmpBackupStopInput.model_validate(args)
+                result = await qmp_tools.stop_qmp_nbd_backup(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    export_name=data.export_name,
+                    remove_export=data.remove_export,
+                    stop_server=data.stop_server,
+                    mode=data.mode,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_qmp_backup_status":
+                data = QmpBackupStatusInput.model_validate(args)
+                result = await qmp_tools.get_qmp_backup_status(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    job_id=data.job_id,
+                    event_limit=data.event_limit,
                     hypervisor_ref=data.hypervisor_ref,
                 )
             elif tool_name == "qmp_block_dirty_bitmap_add":

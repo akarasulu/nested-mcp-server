@@ -345,6 +345,130 @@ def test_qmp_nbd_server_remove_and_stop_arguments():
     asyncio.run(_run())
 
 
+def test_plan_qmp_backup_returns_ordered_steps():
+    config = _config(allow_qmp=True)
+    address = {"type": "unix", "data": {"path": "/tmp/mcp_test_nbd.sock"}}
+
+    result = qmp_tools.plan_qmp_backup(
+        config,
+        domain_ref="vm1",
+        device="drive0",
+        export_name="rootfs",
+        address=address,
+        bitmap="dirty0",
+        writable=False,
+        backup_target="backup0",
+        sync="incremental",
+        job_id="job0",
+        speed=0,
+        hypervisor_ref=None,
+    )
+
+    assert result["requires_mutations"] is True
+    assert [step["tool"] for step in result["steps"]] == [
+        "qmp_nbd_server_start",
+        "qmp_nbd_server_add",
+        "qmp_blockdev_backup",
+        "stop_qmp_nbd_backup",
+    ]
+    assert result["steps"][2]["arguments"]["target"] == "backup0"
+
+
+def test_start_qmp_nbd_backup_runs_export_and_backup():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(side_effect=[
+            _mock_execute_return("nbd-server-start"),
+            _mock_execute_return("nbd-server-add"),
+            _mock_execute_return("blockdev-backup"),
+        ])
+        config = _config(allow_qmp=True, allow_mutations=True)
+        address = {"type": "unix", "data": {"path": "/tmp/mcp_test_nbd.sock"}}
+
+        result = await qmp_tools.start_qmp_nbd_backup(
+            config,
+            adapter,
+            domain_ref="vm1",
+            device="drive0",
+            export_name="rootfs",
+            address=address,
+            bitmap="dirty0",
+            writable=False,
+            backup_target="backup0",
+            sync="incremental",
+            job_id="job0",
+            speed=4096,
+            cleanup_on_failure=True,
+            hypervisor_ref=None,
+        )
+
+        assert result["status"] == "started"
+        assert [call.kwargs["command"] for call in adapter.execute.call_args_list] == [
+            "nbd-server-start",
+            "nbd-server-add",
+            "blockdev-backup",
+        ]
+
+    asyncio.run(_run())
+
+
+def test_stop_qmp_nbd_backup_removes_export_and_stops_server():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(side_effect=[
+            _mock_execute_return("nbd-server-remove"),
+            _mock_execute_return("nbd-server-stop"),
+        ])
+        config = _config(allow_qmp=True, allow_mutations=True)
+
+        result = await qmp_tools.stop_qmp_nbd_backup(
+            config,
+            adapter,
+            domain_ref="vm1",
+            export_name="rootfs",
+            remove_export=True,
+            stop_server=True,
+            mode="safe",
+            hypervisor_ref=None,
+        )
+
+        assert result["status"] == "stopped"
+        assert [call.kwargs["command"] for call in adapter.execute.call_args_list] == [
+            "nbd-server-remove",
+            "nbd-server-stop",
+        ]
+
+    asyncio.run(_run())
+
+
+def test_get_qmp_backup_status_combines_jobs_and_events(tmp_path):
+    async def _run():
+        event_log = tmp_path / "qmp-events.log"
+        event_log.write_text(
+            '{"domain_ref":"vm1","event":{"event":"BLOCK_JOB_COMPLETED"},"source":"qmp","timestamp":"2026-01-01T00:00:00+00:00"}\n',
+            encoding="utf-8",
+        )
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("query-block-jobs"))
+        config = _config(allow_qmp=True)
+        config.qmp_event_log_path = str(event_log)
+
+        result = await qmp_tools.get_qmp_backup_status(
+            config,
+            adapter,
+            domain_ref="vm1",
+            job_id="job0",
+            event_limit=10,
+            hypervisor_ref=None,
+        )
+
+        assert result["job_id"] == "job0"
+        assert result["block_jobs"]["command"] == "query-block-jobs"
+        assert result["event_count"] == 1
+
+    asyncio.run(_run())
+
+
 # ---------------------------------------------------------------------------
 # 7. qmp_block_dirty_bitmap_add — mutations gate + persistent in args
 # ---------------------------------------------------------------------------

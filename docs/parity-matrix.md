@@ -58,9 +58,9 @@ Not yet parity-level:
 
 ## Coverage indicator
 
-**Operator parity coverage: 96%**
+**Operator parity coverage: 97%**
 
-This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus broad Phase C coverage through storage upload/download, storage metadata inspection, QMP block backup/NBD export controls, durable QMP event replay, per-family policy scopes, QMP migration telemetry, and persistent NUMA topology controls.
+This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus broad Phase C coverage through storage upload/download, storage metadata inspection, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay, per-family policy scopes, QMP migration telemetry, and persistent NUMA topology controls.
 
 ## Matrix
 
@@ -98,7 +98,7 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 |---|---|---|---|
 | Query and status | Implemented | qmp_query_status, qmp_query_version, qmp_query_cpus, qmp_query_balloon, qmp_query_block, qmp_query_blockstats, qmp_query_pci, qmp_query_iothreads, qmp_query_chardev, qmp_query_vnc, qmp_query_block_jobs, qmp_query_machines | Add deeper stat variants |
 | CPU and memory runtime controls | Implemented | qmp_balloon, qmp_query_hotpluggable_cpus, qmp_cpu_add, qmp_query_memory_devices, qmp_object_add, qmp_object_del; libvirt-backed get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology | Add live QMP NUMA object wiring where supported |
-| Block and storage runtime jobs | Implemented | qmp_block_stream, qmp_block_job_cancel, qmp_block_job_pause, qmp_block_job_resume, qmp_block_job_complete, qmp_drive_mirror, qmp_blockdev_backup, qmp_nbd_server_start, qmp_nbd_server_add, qmp_nbd_server_remove, qmp_nbd_server_stop, qmp_query_block_dirty_bitmaps, qmp_block_dirty_bitmap_add, qmp_block_dirty_bitmap_remove, qmp_block_dirty_bitmap_clear | Add higher-level backup orchestration recipes |
+| Block and storage runtime jobs | Implemented | qmp_block_stream, qmp_block_job_cancel, qmp_block_job_pause, qmp_block_job_resume, qmp_block_job_complete, qmp_drive_mirror, qmp_blockdev_backup, qmp_nbd_server_start, qmp_nbd_server_add, qmp_nbd_server_remove, qmp_nbd_server_stop, plan_qmp_backup, start_qmp_nbd_backup, stop_qmp_nbd_backup, get_qmp_backup_status, qmp_query_block_dirty_bitmaps, qmp_block_dirty_bitmap_add, qmp_block_dirty_bitmap_remove, qmp_block_dirty_bitmap_clear | Add scheduled backup policy and restore validation helpers |
 | Device hotplug and bus operations | Implemented | qmp_device_add, qmp_device_del, qmp_netdev_add, qmp_netdev_del, qmp_chardev_add, qmp_chardev_remove | PCI bus management and MDEV not yet |
 | Migration telemetry | Implemented | qmp_query_migrate, qmp_query_migrate_capabilities, qmp_query_migrate_parameters | Migration control commands out of scope |
 | Event streaming | Implemented | collect_events with timeout/type filtering and qmp_replay_events JSONL replay | Add retention policies and long-running collection service |
@@ -131,6 +131,7 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 - Storage pool/volume metadata inspection: done.
 - Persistent NUMA topology and placement controls: done.
 - QMP block backup and NBD export controls: done.
+- QMP backup orchestration recipes: done.
 - Durable QMP event replay controls: done.
 - Per-family policy scope introspection: done.
 
@@ -145,8 +146,8 @@ When a new feature ships:
 
 ## Suggested next parity targets
 
-1. Higher-level backup orchestration recipes around QMP blockdev-backup/NBD exports.
-2. QMP event retention policies and long-running collection service.
+1. QMP event retention policies and long-running collection service.
+2. Scheduled backup policy and restore validation helpers.
 3. Per-tool role/actor policy once actor identity is available.
 4. Mutable storage metadata update support only where libvirt exposes a safe update path.
 5. Live NUMA reshaping only where libvirt/QEMU support it safely.

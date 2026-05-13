@@ -4,9 +4,9 @@ Python MCP server for libvirt and QEMU/QMP virtualization operations.
 
 ## Coverage
 
-**Operator parity coverage: 96%**
+**Operator parity coverage: 97%**
 
-Phase A and Phase B are complete. Phase C is broadly covered with storage upload/download, storage metadata inspection, QMP block backup/NBD export controls, durable QMP event replay, per-family policy scopes, QMP migration telemetry, and persistent NUMA topology controls already implemented. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
+Phase A and Phase B are complete. Phase C is broadly covered with storage upload/download, storage metadata inspection, QMP block backup/NBD export controls and orchestration recipes, durable QMP event replay, per-family policy scopes, QMP migration telemetry, and persistent NUMA topology controls already implemented. The live tracker is [docs/parity-matrix.md](docs/parity-matrix.md).
 
 ## What It Exposes
 
@@ -17,7 +17,7 @@ Phase A and Phase B are complete. Phase C is broadly covered with storage upload
 - Storage volume clone, linked clone, resize, wipe, upload, and download flows
 - Host interfaces, network filters, node devices, and passthrough controls
 - QMP command bridge with allowlist policy, typed QMP query/control helpers, and event collection
-- QMP block backup/NBD export controls and durable event replay
+- QMP block backup/NBD export controls, orchestration recipes, and durable event replay
 - Audit logging and default-safe mutation gates
 
 ## Safety Model

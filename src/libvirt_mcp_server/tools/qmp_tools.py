@@ -109,6 +109,192 @@ def qmp_replay_events(
     }
 
 
+def plan_qmp_backup(
+    config: ServerConfig,
+    *,
+    domain_ref: str,
+    device: str,
+    export_name: str | None,
+    address: dict,
+    bitmap: str | None,
+    writable: bool,
+    backup_target: str | None,
+    sync: str,
+    job_id: str | None,
+    speed: int,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_allowed(config)
+    steps = _backup_plan_steps(
+        device=device,
+        export_name=export_name,
+        address=address,
+        bitmap=bitmap,
+        writable=writable,
+        backup_target=backup_target,
+        sync=sync,
+        job_id=job_id,
+        speed=speed,
+    )
+    return {
+        "source": "server",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_ref": domain_ref,
+        "requires_mutations": True,
+        "steps": steps,
+        "total_count": len(steps),
+    }
+
+
+async def start_qmp_nbd_backup(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    device: str,
+    export_name: str | None,
+    address: dict,
+    bitmap: str | None,
+    writable: bool,
+    backup_target: str | None,
+    sync: str,
+    job_id: str | None,
+    speed: int,
+    cleanup_on_failure: bool,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "start_qmp_nbd_backup")
+    completed: list[dict] = []
+    try:
+        start_result = await qmp_nbd_server_start(
+            config,
+            qmp_adapter,
+            domain_ref=domain_ref,
+            address=address,
+            tls_creds=None,
+            tls_authz=None,
+            hypervisor_ref=hypervisor_ref,
+        )
+        completed.append({"step": "qmp_nbd_server_start", "result": start_result})
+
+        add_result = await qmp_nbd_server_add(
+            config,
+            qmp_adapter,
+            domain_ref=domain_ref,
+            device=device,
+            export_name=export_name,
+            writable=writable,
+            bitmap=bitmap,
+            hypervisor_ref=hypervisor_ref,
+        )
+        completed.append({"step": "qmp_nbd_server_add", "result": add_result})
+
+        if backup_target:
+            backup_result = await qmp_blockdev_backup(
+                config,
+                qmp_adapter,
+                domain_ref=domain_ref,
+                device=device,
+                target=backup_target,
+                sync=sync,
+                job_id=job_id,
+                speed=speed,
+                hypervisor_ref=hypervisor_ref,
+            )
+            completed.append({"step": "qmp_blockdev_backup", "result": backup_result})
+    except Exception:
+        if cleanup_on_failure and completed:
+            try:
+                await qmp_adapter.execute(domain_ref=domain_ref, command="nbd-server-stop", arguments={})
+            except Exception:
+                pass
+        raise
+
+    return {
+        "source": "server",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_ref": domain_ref,
+        "status": "started",
+        "steps": completed,
+        "total_count": len(completed),
+    }
+
+
+async def stop_qmp_nbd_backup(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    export_name: str | None,
+    remove_export: bool,
+    stop_server: bool,
+    mode: str,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "stop_qmp_nbd_backup")
+    completed: list[dict] = []
+    if remove_export and export_name:
+        remove_result = await qmp_nbd_server_remove(
+            config,
+            qmp_adapter,
+            domain_ref=domain_ref,
+            export_name=export_name,
+            mode=mode,
+            hypervisor_ref=hypervisor_ref,
+        )
+        completed.append({"step": "qmp_nbd_server_remove", "result": remove_result})
+    if stop_server:
+        stop_result = await qmp_nbd_server_stop(
+            config,
+            qmp_adapter,
+            domain_ref=domain_ref,
+            hypervisor_ref=hypervisor_ref,
+        )
+        completed.append({"step": "qmp_nbd_server_stop", "result": stop_result})
+    return {
+        "source": "server",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_ref": domain_ref,
+        "status": "stopped",
+        "steps": completed,
+        "total_count": len(completed),
+    }
+
+
+async def get_qmp_backup_status(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    job_id: str | None,
+    event_limit: int,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_allowed(config)
+    jobs = await qmp_adapter.execute(domain_ref=domain_ref, command="query-block-jobs", arguments={})
+    replay = qmp_replay_events(
+        config,
+        domain_ref=domain_ref,
+        event_types=["BLOCK_JOB_COMPLETED", "BLOCK_JOB_CANCELLED", "BLOCK_JOB_ERROR", "JOB_STATUS_CHANGE"],
+        since=None,
+        limit=event_limit,
+        hypervisor_ref=hypervisor_ref,
+    )
+    return {
+        "source": "server",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_ref": domain_ref,
+        "job_id": job_id,
+        "block_jobs": jobs,
+        "events": replay["items"],
+        "event_count": replay["total_count"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Typed read-only query tools
 # ---------------------------------------------------------------------------
@@ -742,3 +928,41 @@ def _append_qmp_events(config: ServerConfig, payload: dict) -> None:
                 "event": event,
             }
             handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _backup_plan_steps(
+    *,
+    device: str,
+    export_name: str | None,
+    address: dict,
+    bitmap: str | None,
+    writable: bool,
+    backup_target: str | None,
+    sync: str,
+    job_id: str | None,
+    speed: int,
+) -> list[dict]:
+    steps: list[dict] = [
+        {"tool": "qmp_nbd_server_start", "arguments": {"address": address}},
+        {
+            "tool": "qmp_nbd_server_add",
+            "arguments": {
+                "device": device,
+                "export_name": export_name,
+                "writable": writable,
+                "bitmap": bitmap,
+            },
+        },
+    ]
+    if backup_target:
+        args = {"device": device, "target": backup_target, "sync": sync, "job_id": job_id}
+        if speed > 0:
+            args["speed"] = speed
+        steps.append({"tool": "qmp_blockdev_backup", "arguments": args})
+    steps.append(
+        {
+            "tool": "stop_qmp_nbd_backup",
+            "arguments": {"export_name": export_name, "remove_export": bool(export_name), "stop_server": True},
+        }
+    )
+    return steps

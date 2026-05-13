@@ -293,6 +293,34 @@ class QmpNbdServerRemoveInput(DomainRefInput):
     mode: str = Field(default="safe", max_length=32)
 
 
+class QmpBackupPlanInput(DomainRefInput):
+    device: str = Field(min_length=1, max_length=1024)
+    export_name: str | None = Field(default=None, max_length=255)
+    address: dict[str, Any]
+    bitmap: str | None = Field(default=None, max_length=255)
+    writable: bool = False
+    backup_target: str | None = Field(default=None, max_length=1024)
+    sync: str = Field(default="full", min_length=1, max_length=32)
+    job_id: str | None = Field(default=None, max_length=255)
+    speed: int = Field(default=0, ge=0)
+
+
+class QmpBackupStartInput(QmpBackupPlanInput):
+    cleanup_on_failure: bool = True
+
+
+class QmpBackupStopInput(DomainRefInput):
+    export_name: str | None = Field(default=None, max_length=255)
+    remove_export: bool = True
+    stop_server: bool = True
+    mode: str = Field(default="safe", max_length=32)
+
+
+class QmpBackupStatusInput(DomainRefInput):
+    job_id: str | None = Field(default=None, max_length=255)
+    event_limit: int = Field(default=50, ge=1, le=10000)
+
+
 class QmpBitmapInput(DomainRefInput):
     node: str = Field(min_length=1, max_length=255)
     name: str = Field(min_length=1, max_length=255)

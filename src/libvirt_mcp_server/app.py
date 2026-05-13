@@ -798,6 +798,111 @@ async def qmp_nbd_server_stop(domain_ref: str, hypervisor_ref: str | None = None
     return _render(result)
 
 
+@app.tool(description="Plan a QMP NBD/blockdev backup sequence without starting it.")
+async def plan_qmp_backup(
+    domain_ref: str,
+    device: str,
+    address: dict,
+    export_name: str | None = None,
+    bitmap: str | None = None,
+    writable: bool = False,
+    backup_target: str | None = None,
+    sync: str = "full",
+    job_id: str | None = None,
+    speed: int = 0,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "plan_qmp_backup",
+        {
+            "domain_ref": domain_ref,
+            "device": device,
+            "export_name": export_name,
+            "address": address,
+            "bitmap": bitmap,
+            "writable": writable,
+            "backup_target": backup_target,
+            "sync": sync,
+            "job_id": job_id,
+            "speed": speed,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Start a QMP NBD backup export and optionally a blockdev-backup job.")
+async def start_qmp_nbd_backup(
+    domain_ref: str,
+    device: str,
+    address: dict,
+    export_name: str | None = None,
+    bitmap: str | None = None,
+    writable: bool = False,
+    backup_target: str | None = None,
+    sync: str = "full",
+    job_id: str | None = None,
+    speed: int = 0,
+    cleanup_on_failure: bool = True,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "start_qmp_nbd_backup",
+        {
+            "domain_ref": domain_ref,
+            "device": device,
+            "export_name": export_name,
+            "address": address,
+            "bitmap": bitmap,
+            "writable": writable,
+            "backup_target": backup_target,
+            "sync": sync,
+            "job_id": job_id,
+            "speed": speed,
+            "cleanup_on_failure": cleanup_on_failure,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Stop a QMP NBD backup export and/or NBD server.")
+async def stop_qmp_nbd_backup(
+    domain_ref: str,
+    export_name: str | None = None,
+    remove_export: bool = True,
+    stop_server: bool = True,
+    mode: str = "safe",
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "stop_qmp_nbd_backup",
+        {
+            "domain_ref": domain_ref,
+            "export_name": export_name,
+            "remove_export": remove_export,
+            "stop_server": stop_server,
+            "mode": mode,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Return QMP backup job status and recent persisted backup events.")
+async def get_qmp_backup_status(
+    domain_ref: str,
+    job_id: str | None = None,
+    event_limit: int = 50,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "get_qmp_backup_status",
+        {"domain_ref": domain_ref, "job_id": job_id, "event_limit": event_limit, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
 # ---------------------------------------------------------------------------
 # Node devices
 # ---------------------------------------------------------------------------
