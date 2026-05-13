@@ -143,3 +143,51 @@ def get_qmp_policy(config: ServerConfig) -> dict:
             config.qmp_allowlist | (config.qmp_mutation_allowlist if config.allow_mutations else set())
         ),
     }
+
+
+def get_policy_scopes(config: ServerConfig) -> dict:
+    scopes = [
+        {
+            "scope": "read_only",
+            "enabled": True,
+            "families": ["host", "domain_inspect", "network_inspect", "storage_inspect", "qmp_query"],
+            "policy_gate": None,
+        },
+        {
+            "scope": "mutation",
+            "enabled": config.allow_mutations,
+            "families": ["domain_lifecycle", "network_lifecycle", "storage_lifecycle", "block_jobs", "qmp_runtime_controls"],
+            "policy_gate": "allow_mutations",
+        },
+        {
+            "scope": "define",
+            "enabled": config.allow_define,
+            "families": ["domain_define", "network_define", "storage_pool_define", "interface_define", "nwfilter_define"],
+            "policy_gate": "allow_define",
+        },
+        {
+            "scope": "destructive",
+            "enabled": config.allow_destructive,
+            "families": ["domain_destroy", "snapshot_delete", "storage_volume_delete", "secret_undefine"],
+            "policy_gate": "allow_destructive",
+        },
+        {
+            "scope": "qmp",
+            "enabled": config.allow_qmp,
+            "families": ["qmp_query", "qmp_events", "qmp_bridge"],
+            "policy_gate": "allow_qmp",
+        },
+        {
+            "scope": "secret_read",
+            "enabled": config.allow_secret_read,
+            "families": ["secret_value_read"],
+            "policy_gate": "allow_secret_read",
+        },
+    ]
+    return {
+        "source": "server",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "items": scopes,
+        "total_count": len(scopes),
+        "policy": config.to_policy_dict(),
+    }

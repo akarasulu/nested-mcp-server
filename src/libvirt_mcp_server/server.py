@@ -41,6 +41,7 @@ from libvirt_mcp_server.schemas import (
     QmpBlockJobCancelInput,
     QmpBlockJobDeviceInput,
     QmpBlockStreamInput,
+    QmpBlockdevBackupInput,
     QmpChardevAddInput,
     QmpChardevRemoveInput,
     QmpCommandInput,
@@ -51,8 +52,12 @@ from libvirt_mcp_server.schemas import (
     QmpEventsInput,
     QmpNetdevAddInput,
     QmpNetdevDelInput,
+    QmpNbdServerAddInput,
+    QmpNbdServerRemoveInput,
+    QmpNbdServerStartInput,
     QmpObjectAddInput,
     QmpObjectDelInput,
+    QmpReplayEventsInput,
     SetAutostartInput,
     SetEmulatorPinInput,
     SetMemoryInput,
@@ -161,6 +166,7 @@ class LibvirtMCPServer:
             "qmp_command",
             "qmp_capabilities",
             "qmp_events",
+            "qmp_replay_events",
             # Typed QMP query tools
             "qmp_query_status",
             "qmp_query_version",
@@ -251,6 +257,11 @@ class LibvirtMCPServer:
             "qmp_object_add",
             "qmp_object_del",
             "qmp_drive_mirror",
+            "qmp_blockdev_backup",
+            "qmp_nbd_server_start",
+            "qmp_nbd_server_add",
+            "qmp_nbd_server_remove",
+            "qmp_nbd_server_stop",
             "qmp_block_dirty_bitmap_add",
             "qmp_block_dirty_bitmap_remove",
             "qmp_block_dirty_bitmap_clear",
@@ -267,6 +278,7 @@ class LibvirtMCPServer:
             # Audit and policy
             "get_audit_log",
             "get_qmp_policy",
+            "get_policy_scopes",
             # Secrets lifecycle
             "list_secrets",
             "get_secret",
@@ -617,6 +629,16 @@ class LibvirtMCPServer:
                     timeout_seconds=data.timeout_seconds,
                     hypervisor_ref=data.hypervisor_ref,
                 )
+            elif tool_name == "qmp_replay_events":
+                data = QmpReplayEventsInput.model_validate(args)
+                result = qmp_tools.qmp_replay_events(
+                    self.config,
+                    domain_ref=data.domain_ref,
+                    event_types=data.event_types,
+                    since=data.since,
+                    limit=data.limit,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
             elif tool_name in {
                 "qmp_query_status", "qmp_query_version", "qmp_query_cpus", "qmp_query_balloon",
                 "qmp_query_block", "qmp_query_blockstats", "qmp_query_pci", "qmp_query_iothreads",
@@ -750,6 +772,60 @@ class LibvirtMCPServer:
                     format=data.format,
                     sync=data.sync,
                     speed=data.speed,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_blockdev_backup":
+                data = QmpBlockdevBackupInput.model_validate(args)
+                result = await qmp_tools.qmp_blockdev_backup(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    device=data.device,
+                    target=data.target,
+                    sync=data.sync,
+                    job_id=data.job_id,
+                    speed=data.speed,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_nbd_server_start":
+                data = QmpNbdServerStartInput.model_validate(args)
+                result = await qmp_tools.qmp_nbd_server_start(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    address=data.address,
+                    tls_creds=data.tls_creds,
+                    tls_authz=data.tls_authz,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_nbd_server_add":
+                data = QmpNbdServerAddInput.model_validate(args)
+                result = await qmp_tools.qmp_nbd_server_add(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    device=data.device,
+                    export_name=data.export_name,
+                    writable=data.writable,
+                    bitmap=data.bitmap,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_nbd_server_remove":
+                data = QmpNbdServerRemoveInput.model_validate(args)
+                result = await qmp_tools.qmp_nbd_server_remove(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
+                    export_name=data.export_name,
+                    mode=data.mode,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_nbd_server_stop":
+                data = DomainRefInput.model_validate(args)
+                result = await qmp_tools.qmp_nbd_server_stop(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_ref=data.domain_ref,
                     hypervisor_ref=data.hypervisor_ref,
                 )
             elif tool_name == "qmp_block_dirty_bitmap_add":
@@ -1284,6 +1360,8 @@ class LibvirtMCPServer:
                 )
             elif tool_name == "get_qmp_policy":
                 result = host_tools.get_qmp_policy(self.config)
+            elif tool_name == "get_policy_scopes":
+                result = host_tools.get_policy_scopes(self.config)
             # ------------------------------------------------------------------
             # Secrets lifecycle
             # ------------------------------------------------------------------

@@ -25,6 +25,8 @@ def test_config_defaults(monkeypatch):
     assert cfg.allow_destructive is False
     assert cfg.destructive_domain_allowlist == set()
     assert cfg.allow_qmp is True
+    assert "blockdev-backup" in cfg.qmp_mutation_allowlist
+    assert "nbd-server-start" in cfg.qmp_mutation_allowlist
 
 
 def test_config_parses_destructive_domain_allowlist(monkeypatch):

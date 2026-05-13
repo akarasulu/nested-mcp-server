@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+
 from libvirt_mcp_server.config import ServerConfig
 from libvirt_mcp_server.adapters.qmp_adapter import QMPAdapter
 from libvirt_mcp_server.errors import MCPError
@@ -59,7 +63,50 @@ async def qmp_events(
     )
     payload["hypervisor_ref"] = hypervisor_ref or "default"
     payload["since"] = since
+    _append_qmp_events(config, payload)
     return payload
+
+
+def qmp_replay_events(
+    config: ServerConfig,
+    *,
+    domain_ref: str | None,
+    event_types: list[str],
+    since: str | None,
+    limit: int,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_allowed(config)
+    event_log = Path(config.qmp_event_log_path)
+    filters = set(event_types)
+    items: list[dict] = []
+    if event_log.exists():
+        for line in event_log.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if domain_ref and record.get("domain_ref") != domain_ref:
+                continue
+            if since and str(record.get("timestamp", "")) < since:
+                continue
+            event_name = record.get("event", {}).get("event")
+            if filters and event_name not in filters:
+                continue
+            items.append(record)
+    sliced = items[-limit:]
+    return {
+        "source": "qmp",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_ref": domain_ref,
+        "event_types_filter": event_types,
+        "items": sliced,
+        "total_count": len(sliced),
+        "event_log_path": str(event_log),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +445,104 @@ async def qmp_drive_mirror(
     return payload
 
 
+async def qmp_blockdev_backup(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    device: str,
+    target: str,
+    sync: str = "full",
+    job_id: str | None = None,
+    speed: int = 0,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "qmp_blockdev_backup")
+    arguments: dict = {"device": device, "target": target, "sync": sync}
+    if job_id:
+        arguments["job-id"] = job_id
+    if speed > 0:
+        arguments["speed"] = speed
+    payload = await qmp_adapter.execute(domain_ref=domain_ref, command="blockdev-backup", arguments=arguments)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+async def qmp_nbd_server_start(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    address: dict,
+    tls_creds: str | None = None,
+    tls_authz: str | None = None,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "qmp_nbd_server_start")
+    arguments: dict = {"addr": address}
+    if tls_creds:
+        arguments["tls-creds"] = tls_creds
+    if tls_authz:
+        arguments["tls-authz"] = tls_authz
+    payload = await qmp_adapter.execute(domain_ref=domain_ref, command="nbd-server-start", arguments=arguments)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+async def qmp_nbd_server_add(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    device: str,
+    export_name: str | None = None,
+    writable: bool = False,
+    bitmap: str | None = None,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "qmp_nbd_server_add")
+    arguments: dict = {"device": device, "writable": writable}
+    if export_name:
+        arguments["name"] = export_name
+    if bitmap:
+        arguments["bitmap"] = bitmap
+    payload = await qmp_adapter.execute(domain_ref=domain_ref, command="nbd-server-add", arguments=arguments)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+async def qmp_nbd_server_remove(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    export_name: str,
+    mode: str = "safe",
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "qmp_nbd_server_remove")
+    payload = await qmp_adapter.execute(
+        domain_ref=domain_ref,
+        command="nbd-server-remove",
+        arguments={"name": export_name, "mode": mode},
+    )
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+async def qmp_nbd_server_stop(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_ref: str,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_mutations_allowed(config, "qmp_nbd_server_stop")
+    payload = await qmp_adapter.execute(domain_ref=domain_ref, command="nbd-server-stop", arguments={})
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 async def qmp_query_block_dirty_bitmaps(config: ServerConfig, qmp_adapter: QMPAdapter, *, domain_ref: str, hypervisor_ref: str | None) -> dict:
     _ensure_qmp_allowed(config)
     payload = await qmp_adapter.execute(domain_ref=domain_ref, command="query-block-dirty-bitmaps", arguments={})
@@ -580,3 +725,20 @@ def _ensure_qmp_mutations_allowed(config: ServerConfig, tool_name: str) -> None:
             message=f"Tool '{tool_name}' requires allow_mutations=true in server config",
         )
 
+
+def _append_qmp_events(config: ServerConfig, payload: dict) -> None:
+    events = payload.get("events") or []
+    if not events:
+        return
+    event_log = Path(config.qmp_event_log_path)
+    event_log.parent.mkdir(parents=True, exist_ok=True)
+    observed_at = payload.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    with event_log.open("a", encoding="utf-8") as handle:
+        for event in events:
+            record = {
+                "source": "qmp",
+                "timestamp": observed_at,
+                "domain_ref": payload.get("domain_ref"),
+                "event": event,
+            }
+            handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")

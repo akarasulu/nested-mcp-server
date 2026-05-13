@@ -530,6 +530,27 @@ async def qmp_events(
     return _render(result)
 
 
+@app.tool(description="Replay persisted QMP events with optional filters.")
+async def qmp_replay_events(
+    domain_ref: str | None = None,
+    event_types: list[str] | None = None,
+    since: str | None = None,
+    limit: int = 100,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_replay_events",
+        {
+            "domain_ref": domain_ref,
+            "event_types": event_types or [],
+            "since": since,
+            "limit": limit,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
 # ---------------------------------------------------------------------------
 # Typed QMP query tools
 # ---------------------------------------------------------------------------
@@ -658,6 +679,122 @@ async def qmp_device_add(domain_ref: str, driver: str, device_id: str, device_op
 async def qmp_device_del(domain_ref: str, device_id: str, hypervisor_ref: str | None = None) -> str:
     result = await _get_server().call_tool("qmp_device_del", {"domain_ref": domain_ref, "device_id": device_id, "hypervisor_ref": hypervisor_ref})
     return _render(result)
+
+
+@app.tool(description="Mirror a block device to a target file via QMP. Requires allow_mutations=true.")
+async def qmp_drive_mirror(
+    domain_ref: str,
+    device: str,
+    target: str,
+    format: str = "qcow2",
+    sync: str = "full",
+    speed: int = 0,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_drive_mirror",
+        {
+            "domain_ref": domain_ref,
+            "device": device,
+            "target": target,
+            "format": format,
+            "sync": sync,
+            "speed": speed,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Start a blockdev-backup job via QMP. Requires allow_mutations=true.")
+async def qmp_blockdev_backup(
+    domain_ref: str,
+    device: str,
+    target: str,
+    sync: str = "full",
+    job_id: str | None = None,
+    speed: int = 0,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_blockdev_backup",
+        {
+            "domain_ref": domain_ref,
+            "device": device,
+            "target": target,
+            "sync": sync,
+            "job_id": job_id,
+            "speed": speed,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Start the QMP NBD server. Requires allow_mutations=true.")
+async def qmp_nbd_server_start(
+    domain_ref: str,
+    address: dict,
+    tls_creds: str | None = None,
+    tls_authz: str | None = None,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_nbd_server_start",
+        {
+            "domain_ref": domain_ref,
+            "address": address,
+            "tls_creds": tls_creds,
+            "tls_authz": tls_authz,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Export a block device over the QMP NBD server. Requires allow_mutations=true.")
+async def qmp_nbd_server_add(
+    domain_ref: str,
+    device: str,
+    export_name: str | None = None,
+    writable: bool = False,
+    bitmap: str | None = None,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_nbd_server_add",
+        {
+            "domain_ref": domain_ref,
+            "device": device,
+            "export_name": export_name,
+            "writable": writable,
+            "bitmap": bitmap,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Remove an export from the QMP NBD server. Requires allow_mutations=true.")
+async def qmp_nbd_server_remove(
+    domain_ref: str,
+    export_name: str,
+    mode: str = "safe",
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_nbd_server_remove",
+        {"domain_ref": domain_ref, "export_name": export_name, "mode": mode, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
+@app.tool(description="Stop the QMP NBD server. Requires allow_mutations=true.")
+async def qmp_nbd_server_stop(domain_ref: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "qmp_nbd_server_stop",
+        {"domain_ref": domain_ref, "hypervisor_ref": hypervisor_ref},
+    )
     return _render(result)
 
 
@@ -1140,6 +1277,12 @@ async def get_audit_log(
 @app.tool(description="Return QMP policy toggles and allowlists.")
 async def get_qmp_policy() -> str:
     result = await _get_server().call_tool("get_qmp_policy", {})
+    return _render(result)
+
+
+@app.tool(description="Return per-family policy scopes and their active gates.")
+async def get_policy_scopes() -> str:
+    result = await _get_server().call_tool("get_policy_scopes", {})
     return _render(result)
 
 

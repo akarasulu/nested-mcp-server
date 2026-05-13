@@ -46,6 +46,14 @@ def test_local_hypervisor_readonly_smoke():
     assert "capabilities_summary" in host
     assert "capabilities_xml" not in host
 
+    policy_scopes = asyncio.run(server.call_tool("get_policy_scopes", {}))
+    assert "error" not in policy_scopes
+    assert policy_scopes["total_count"] >= 1
+
+    replayed_events = asyncio.run(server.call_tool("qmp_replay_events", {"limit": 10}))
+    assert "error" not in replayed_events
+    assert "items" in replayed_events
+
     domains = asyncio.run(server.call_tool("list_domains", {"active_only": False, "inactive_only": False}))
     assert "error" not in domains
     assert "items" in domains

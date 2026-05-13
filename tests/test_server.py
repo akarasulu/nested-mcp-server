@@ -53,6 +53,13 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
     assert "create_linked_clone_volume" in tools
     assert "upload_storage_volume" in tools
     assert "download_storage_volume" in tools
+    assert "qmp_blockdev_backup" in tools
+    assert "qmp_nbd_server_start" in tools
+    assert "qmp_nbd_server_add" in tools
+    assert "qmp_nbd_server_remove" in tools
+    assert "qmp_nbd_server_stop" in tools
+    assert "qmp_replay_events" in tools
+    assert "get_policy_scopes" in tools
     assert len(tools) >= 20
 
 
@@ -220,6 +227,12 @@ def test_linked_clone_success_audit_includes_backing_details(tmp_path: Path, mon
             {},
             "libvirt_mcp_server.tools.host_tools",
             "get_qmp_policy",
+        ),
+        (
+            "get_policy_scopes",
+            {},
+            "libvirt_mcp_server.tools.host_tools",
+            "get_policy_scopes",
         ),
         (
             "list_secrets",

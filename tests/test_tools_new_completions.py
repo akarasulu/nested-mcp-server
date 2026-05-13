@@ -104,6 +104,15 @@ def test_get_qmp_policy_effective_allowlist(cfg_mutations: ServerConfig):
     assert "device_add" in result["effective_allowlist"]
 
 
+def test_get_policy_scopes_reports_family_gates(cfg_readonly: ServerConfig):
+    result = host_tools.get_policy_scopes(cfg_readonly)
+    scopes = {item["scope"]: item for item in result["items"]}
+    assert scopes["read_only"]["enabled"] is True
+    assert scopes["mutation"]["enabled"] is False
+    assert scopes["mutation"]["policy_gate"] == "allow_mutations"
+    assert "storage_lifecycle" in scopes["mutation"]["families"]
+
+
 def test_secret_get_value_requires_policy(cfg_readonly: ServerConfig):
     adapter = MagicMock()
     with pytest.raises(MCPError) as exc:

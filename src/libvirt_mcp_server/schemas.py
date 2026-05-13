@@ -49,6 +49,14 @@ class QmpEventsInput(DomainRefInput):
     timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
 
 
+class QmpReplayEventsInput(StrictModel):
+    domain_ref: str | None = Field(default=None, max_length=255)
+    event_types: list[str] = Field(default_factory=list)
+    since: str | None = Field(default=None, max_length=255)
+    limit: int = Field(default=100, ge=1, le=10000)
+    hypervisor_ref: str | None = Field(default=None, max_length=255)
+
+
 class NetworkRefInput(StrictModel):
     network_name: str = Field(min_length=1, max_length=255)
     hypervisor_ref: str | None = Field(default=None, max_length=255)
@@ -257,6 +265,32 @@ class QmpDriveMirrorInput(DomainRefInput):
     format: str = Field(default="qcow2")
     sync: str = Field(default="full")
     speed: int = Field(default=0, ge=0)
+
+
+class QmpBlockdevBackupInput(DomainRefInput):
+    device: str = Field(min_length=1, max_length=1024)
+    target: str = Field(min_length=1, max_length=1024)
+    sync: str = Field(default="full", min_length=1, max_length=32)
+    job_id: str | None = Field(default=None, max_length=255)
+    speed: int = Field(default=0, ge=0)
+
+
+class QmpNbdServerStartInput(DomainRefInput):
+    address: dict[str, Any]
+    tls_creds: str | None = Field(default=None, max_length=255)
+    tls_authz: str | None = Field(default=None, max_length=255)
+
+
+class QmpNbdServerAddInput(DomainRefInput):
+    device: str = Field(min_length=1, max_length=1024)
+    export_name: str | None = Field(default=None, max_length=255)
+    writable: bool = False
+    bitmap: str | None = Field(default=None, max_length=255)
+
+
+class QmpNbdServerRemoveInput(DomainRefInput):
+    export_name: str = Field(min_length=1, max_length=255)
+    mode: str = Field(default="safe", max_length=32)
 
 
 class QmpBitmapInput(DomainRefInput):

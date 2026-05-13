@@ -1,5 +1,5 @@
 """Unit tests for new QMP tool families: CPU hotplug, memory devices,
-block mirror/bitmaps, netdev/chardev, migration telemetry."""
+block mirror/backup/bitmaps, NBD export, netdev/chardev, migration telemetry."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ def _config(*, allow_qmp: bool = True, allow_mutations: bool = False) -> ServerC
     cfg = MagicMock(spec=ServerConfig)
     cfg.allow_qmp = allow_qmp
     cfg.allow_mutations = allow_mutations
+    cfg.qmp_event_log_path = "./qmp-events.log"
     return cfg
 
 
@@ -212,6 +213,134 @@ def test_qmp_drive_mirror_speed_included_when_nonzero():
         )
         call_args = adapter.execute.call_args
         assert call_args.kwargs["arguments"]["speed"] == 1048576
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# 6B. qmp_blockdev_backup / NBD export helpers
+# ---------------------------------------------------------------------------
+
+
+def test_qmp_blockdev_backup_arguments_include_job_and_speed():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("blockdev-backup"))
+        config = _config(allow_qmp=True, allow_mutations=True)
+        await qmp_tools.qmp_blockdev_backup(
+            config,
+            adapter,
+            domain_ref="vm1",
+            device="drive0",
+            target="backup0",
+            sync="incremental",
+            job_id="backup-job-1",
+            speed=1048576,
+            hypervisor_ref=None,
+        )
+        adapter.execute.assert_called_once_with(
+            domain_ref="vm1",
+            command="blockdev-backup",
+            arguments={
+                "device": "drive0",
+                "target": "backup0",
+                "sync": "incremental",
+                "job-id": "backup-job-1",
+                "speed": 1048576,
+            },
+        )
+
+    asyncio.run(_run())
+
+
+def test_qmp_blockdev_backup_mutations_gate():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        config = _config(allow_qmp=True, allow_mutations=False)
+        with pytest.raises(MCPError) as exc:
+            await qmp_tools.qmp_blockdev_backup(
+                config,
+                adapter,
+                domain_ref="vm1",
+                device="drive0",
+                target="backup0",
+                hypervisor_ref=None,
+            )
+        assert exc.value.code == "MUTATIONS_DISABLED"
+
+    asyncio.run(_run())
+
+
+def test_qmp_nbd_server_start_arguments():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("nbd-server-start"))
+        config = _config(allow_qmp=True, allow_mutations=True)
+        address = {"type": "unix", "data": {"path": "/tmp/mcp_test_nbd.sock"}}
+        await qmp_tools.qmp_nbd_server_start(
+            config,
+            adapter,
+            domain_ref="vm1",
+            address=address,
+            tls_creds="tls0",
+            tls_authz="authz0",
+            hypervisor_ref=None,
+        )
+        adapter.execute.assert_called_once_with(
+            domain_ref="vm1",
+            command="nbd-server-start",
+            arguments={"addr": address, "tls-creds": "tls0", "tls-authz": "authz0"},
+        )
+
+    asyncio.run(_run())
+
+
+def test_qmp_nbd_server_add_arguments():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("nbd-server-add"))
+        config = _config(allow_qmp=True, allow_mutations=True)
+        await qmp_tools.qmp_nbd_server_add(
+            config,
+            adapter,
+            domain_ref="vm1",
+            device="drive0",
+            export_name="rootfs",
+            writable=False,
+            bitmap="dirty0",
+            hypervisor_ref=None,
+        )
+        adapter.execute.assert_called_once_with(
+            domain_ref="vm1",
+            command="nbd-server-add",
+            arguments={"device": "drive0", "writable": False, "name": "rootfs", "bitmap": "dirty0"},
+        )
+
+    asyncio.run(_run())
+
+
+def test_qmp_nbd_server_remove_and_stop_arguments():
+    async def _run():
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("nbd-server-remove"))
+        config = _config(allow_qmp=True, allow_mutations=True)
+        await qmp_tools.qmp_nbd_server_remove(
+            config,
+            adapter,
+            domain_ref="vm1",
+            export_name="rootfs",
+            mode="hard",
+            hypervisor_ref=None,
+        )
+        adapter.execute.assert_called_once_with(
+            domain_ref="vm1",
+            command="nbd-server-remove",
+            arguments={"name": "rootfs", "mode": "hard"},
+        )
+
+        adapter.execute = AsyncMock(return_value=_mock_execute_return("nbd-server-stop"))
+        await qmp_tools.qmp_nbd_server_stop(config, adapter, domain_ref="vm1", hypervisor_ref=None)
+        adapter.execute.assert_called_once_with(domain_ref="vm1", command="nbd-server-stop", arguments={})
 
     asyncio.run(_run())
 

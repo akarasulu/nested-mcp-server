@@ -39,6 +39,7 @@ def _config(*, allow_qmp: bool = True, allow_mutations: bool = False) -> ServerC
     cfg = MagicMock(spec=ServerConfig)
     cfg.allow_qmp = allow_qmp
     cfg.allow_mutations = allow_mutations
+    cfg.qmp_event_log_path = "./qmp-events.log"
     return cfg
 
 
@@ -159,6 +160,47 @@ def test_qmp_block_job_cancel_force():
             command="block-job-cancel",
             arguments={"device": "vda", "force": True},
         )
+
+    asyncio.run(_run())
+
+
+def test_qmp_events_persist_and_replay(tmp_path: Path):
+    async def _run():
+        event_log = tmp_path / "qmp-events.log"
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.collect_events = AsyncMock(
+            return_value={
+                "source": "qmp",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "domain_ref": "vm1",
+                "events": [{"event": "BLOCK_JOB_COMPLETED", "data": {"device": "vda"}}],
+                "total_count": 1,
+            }
+        )
+        config = _config(allow_qmp=True)
+        config.qmp_event_log_path = str(event_log)
+
+        result = await qmp_tools.qmp_events(
+            config,
+            adapter,
+            domain_ref="vm1",
+            event_types=[],
+            since=None,
+            timeout_seconds=0.1,
+            hypervisor_ref=None,
+        )
+        assert result["total_count"] == 1
+
+        replay = qmp_tools.qmp_replay_events(
+            config,
+            domain_ref="vm1",
+            event_types=["BLOCK_JOB_COMPLETED"],
+            since=None,
+            limit=10,
+            hypervisor_ref=None,
+        )
+        assert replay["total_count"] == 1
+        assert replay["items"][0]["event"]["event"] == "BLOCK_JOB_COMPLETED"
 
     asyncio.run(_run())
 

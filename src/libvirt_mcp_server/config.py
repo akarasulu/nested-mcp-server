@@ -73,6 +73,7 @@ class ServerConfig:
     qmp_socket_dir: str
     qmp_allowlist: set[str]
     qmp_mutation_allowlist: set[str]
+    qmp_event_log_path: str
     test_resource_prefix: str
 
     audit_log_path: str
@@ -101,8 +102,9 @@ class ServerConfig:
             qmp_allowlist=qmp_allowlist,
             qmp_mutation_allowlist=set(_env_csv(
                 "MCP_QMP_MUTATION_ALLOWLIST",
-                "balloon,block-stream,block-job-cancel,block-job-pause,block-job-resume,block-job-complete,device_add,device_del,cpu-add,object-add,object-del,drive-mirror,block-dirty-bitmap-add,block-dirty-bitmap-remove,block-dirty-bitmap-clear,netdev_add,netdev_del,chardev-add,chardev-remove",
+                "balloon,block-stream,block-job-cancel,block-job-pause,block-job-resume,block-job-complete,device_add,device_del,cpu-add,object-add,object-del,drive-mirror,blockdev-backup,nbd-server-start,nbd-server-add,nbd-server-remove,nbd-server-stop,block-dirty-bitmap-add,block-dirty-bitmap-remove,block-dirty-bitmap-clear,netdev_add,netdev_del,chardev-add,chardev-remove",
             )),
+            qmp_event_log_path=os.getenv("MCP_QMP_EVENT_LOG_PATH", "./qmp-events.log"),
             test_resource_prefix=os.getenv("LIBVIRT_MCP_TEST_PREFIX", "mcp_test_"),
             audit_log_path=os.getenv("MCP_AUDIT_LOG_PATH", "./audit.log"),
             log_level=os.getenv("MCP_LOG_LEVEL", "INFO"),
@@ -126,6 +128,7 @@ class ServerConfig:
             "allow_qmp": self.allow_qmp,
             "allow_uri_override": self.allow_uri_override,
             "allow_secret_read": self.allow_secret_read,
+            "qmp_event_log_path": self.qmp_event_log_path,
             "test_resource_prefix": self.test_resource_prefix,
             "max_concurrent_operations": self.max_concurrent_operations,
         }

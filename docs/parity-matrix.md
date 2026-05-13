@@ -58,9 +58,9 @@ Not yet parity-level:
 
 ## Coverage indicator
 
-**Operator parity coverage: 90%**
+**Operator parity coverage: 96%**
 
-This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus partial Phase C coverage through storage upload/download, storage metadata inspection, QMP migration telemetry, and persistent NUMA topology controls.
+This is a project coverage indicator, not Python line coverage. It reflects complete Phase A and Phase B operator coverage, plus broad Phase C coverage through storage upload/download, storage metadata inspection, QMP block backup/NBD export controls, durable QMP event replay, per-family policy scopes, QMP migration telemetry, and persistent NUMA topology controls.
 
 ## Matrix
 
@@ -84,11 +84,11 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 | Storage | Volume inspect and lifecycle | Implemented | list_storage_volumes, get_storage_volume, get_storage_volume_metadata, create_storage_volume_xml, delete_storage_volume, clone_storage_volume, resize_storage_volume, wipe_storage_volume, upload_storage_volume, download_storage_volume | Add mutable metadata update support only where libvirt exposes a safe update path | P1 |
 | Storage | Linked clone management | Implemented | create_linked_clone_volume, get_volume_xml, get_volume_backing_chain | Add parent resolution by volume identity, rebase/commit chain workflows | P1 |
 | Host devices | Node device and passthrough management | Implemented | list_node_devices, get_node_device, detach_node_device, reattach_node_device | Add full MDEV/VFIO mediated device workflows | P2 |
-| Policy | Mutation and destructive controls | Implemented | allow_mutations, allow_define, allow_destructive, allowlists, test prefix checks | Add per-family policy scopes and policy introspection resources | P1 |
+| Policy | Mutation and destructive controls | Implemented | allow_mutations, allow_define, allow_destructive, allowlists, test prefix checks, get_policy_scopes | Add per-tool role/actor policy once actor identity is available | P1 |
 | Audit | Operation audit trail | Implemented | request_id/actor/tool/target/result/error with per-family details and secret redaction | Add correlation IDs across chained sub-operations | P1 |
 | QMP | Basic QMP command bridge | Implemented | qmp_command, qmp_capabilities, qmp_events, get_qmp_policy | Expand allowlist coverage by command family and improve typed responses | P1 |
 | QMP | Typed query tools | Implemented | qmp_query_status, qmp_query_version, qmp_query_cpus, qmp_query_balloon, qmp_query_block, qmp_query_blockstats, qmp_query_pci, qmp_query_iothreads, qmp_query_chardev, qmp_query_vnc, qmp_query_block_jobs, qmp_query_machines, qmp_query_hotpluggable_cpus, qmp_query_memory_devices, qmp_query_block_dirty_bitmaps, qmp_query_migrate, qmp_query_migrate_capabilities, qmp_query_migrate_parameters | Add deeper stat variants | P2 |
-| QMP | Runtime observability and events | Implemented | qmp_events (collect_events with timeout and filtering) | Add durable event stream/resource view and replay controls | P2 |
+| QMP | Runtime observability and events | Implemented | qmp_events (collect_events with timeout and filtering), qmp_replay_events | Add long-running subscription worker/resource view | P2 |
 | Migration | Live/offline migration orchestration | Not started | None | Add migrate workflow, pre-checks, rollback, and policy controls | P1 |
 | Secrets | Secret lifecycle | Implemented | list_secrets, get_secret, define_secret_xml, set_secret_value, get_secret_value, undefine_secret | Add ACL introspection and secret usage mapping | P2 |
 
@@ -98,10 +98,10 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 |---|---|---|---|
 | Query and status | Implemented | qmp_query_status, qmp_query_version, qmp_query_cpus, qmp_query_balloon, qmp_query_block, qmp_query_blockstats, qmp_query_pci, qmp_query_iothreads, qmp_query_chardev, qmp_query_vnc, qmp_query_block_jobs, qmp_query_machines | Add deeper stat variants |
 | CPU and memory runtime controls | Implemented | qmp_balloon, qmp_query_hotpluggable_cpus, qmp_cpu_add, qmp_query_memory_devices, qmp_object_add, qmp_object_del; libvirt-backed get_host_numa_topology, get_domain_numa_topology, set_domain_numa_topology | Add live QMP NUMA object wiring where supported |
-| Block and storage runtime jobs | Implemented | qmp_block_stream, qmp_block_job_cancel, qmp_block_job_pause, qmp_block_job_resume, qmp_block_job_complete, qmp_drive_mirror, qmp_query_block_dirty_bitmaps, qmp_block_dirty_bitmap_add, qmp_block_dirty_bitmap_remove, qmp_block_dirty_bitmap_clear | Add block backup and NBD export |
+| Block and storage runtime jobs | Implemented | qmp_block_stream, qmp_block_job_cancel, qmp_block_job_pause, qmp_block_job_resume, qmp_block_job_complete, qmp_drive_mirror, qmp_blockdev_backup, qmp_nbd_server_start, qmp_nbd_server_add, qmp_nbd_server_remove, qmp_nbd_server_stop, qmp_query_block_dirty_bitmaps, qmp_block_dirty_bitmap_add, qmp_block_dirty_bitmap_remove, qmp_block_dirty_bitmap_clear | Add higher-level backup orchestration recipes |
 | Device hotplug and bus operations | Implemented | qmp_device_add, qmp_device_del, qmp_netdev_add, qmp_netdev_del, qmp_chardev_add, qmp_chardev_remove | PCI bus management and MDEV not yet |
 | Migration telemetry | Implemented | qmp_query_migrate, qmp_query_migrate_capabilities, qmp_query_migrate_parameters | Migration control commands out of scope |
-| Event streaming | Implemented | collect_events with timeout and type filtering | Add durable filtering, offsets, and retention policies |
+| Event streaming | Implemented | collect_events with timeout/type filtering and qmp_replay_events JSONL replay | Add retention policies and long-running collection service |
 
 ## Parity roadmap phases
 
@@ -130,8 +130,9 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 - Storage volume upload/download: done.
 - Storage pool/volume metadata inspection: done.
 - Persistent NUMA topology and placement controls: done.
-- Block backup and NBD export integration: planned.
-- Durable QMP event replay controls: planned.
+- QMP block backup and NBD export controls: done.
+- Durable QMP event replay controls: done.
+- Per-family policy scope introspection: done.
 
 ## Update protocol for this matrix
 
@@ -144,8 +145,8 @@ When a new feature ships:
 
 ## Suggested next parity targets
 
-1. Block backup and NBD export integration.
-2. Durable QMP event replay controls.
-3. Per-family policy scopes and policy introspection resources.
+1. Higher-level backup orchestration recipes around QMP blockdev-backup/NBD exports.
+2. QMP event retention policies and long-running collection service.
+3. Per-tool role/actor policy once actor identity is available.
 4. Mutable storage metadata update support only where libvirt exposes a safe update path.
 5. Live NUMA reshaping only where libvirt/QEMU support it safely.
