@@ -112,6 +112,18 @@ def get_storage_volume_metadata(
     return payload
 
 
+def get_storage_metadata_update_capabilities(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    hypervisor_ref: str | None,
+) -> dict:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_storage_metadata_update_capabilities(uri)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 def define_storage_pool_xml(
     config: ServerConfig,
     libvirt_adapter: LibvirtAdapter,

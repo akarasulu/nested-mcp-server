@@ -14,6 +14,7 @@ Phase A and Phase B are complete. Phase C is broadly covered with storage upload
 - Domain inspection, lifecycle, XML management, statistics, pinning, and persistent NUMA topology
 - Snapshot and checkpoint lifecycle
 - Network, storage pool, and storage volume management with XML and metadata inspection
+- Storage metadata update capability reporting
 - Storage volume clone, linked clone, resize, wipe, upload, and download flows
 - Host interfaces, network filters, node devices, and passthrough controls
 - QMP command bridge with allowlist policy, typed QMP query/control helpers, and event collection

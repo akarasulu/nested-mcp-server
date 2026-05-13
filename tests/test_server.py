@@ -86,6 +86,7 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
     assert "get_storage_pool_xml" in tools
     assert "get_storage_pool_metadata" in tools
     assert "get_storage_volume_metadata" in tools
+    assert "get_storage_metadata_update_capabilities" in tools
     assert "create_storage_volume_xml" in tools
     assert "create_linked_clone_volume" in tools
     assert "upload_storage_volume" in tools

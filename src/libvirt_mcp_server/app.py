@@ -255,6 +255,15 @@ async def get_storage_volume_metadata(pool_name: str, volume_name: str, hypervis
     return _render(result)
 
 
+@app.tool(description="Report whether libvirt exposes safe storage metadata update APIs.")
+async def get_storage_metadata_update_capabilities(hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_storage_metadata_update_capabilities",
+        {"hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
 @app.tool(description="Define a storage pool from XML. Restricted to test-prefixed pool names.")
 async def define_storage_pool_xml(pool_xml: str, hypervisor_ref: str | None = None) -> str:
     result = await _get_server().call_tool(

@@ -58,6 +58,10 @@ def test_local_hypervisor_readonly_smoke():
     assert "error" not in pruned_events
     assert "retained_count" in pruned_events
 
+    storage_metadata_updates = asyncio.run(server.call_tool("get_storage_metadata_update_capabilities", {}))
+    assert "error" not in storage_metadata_updates
+    assert storage_metadata_updates["safe_update_supported"] is False
+
     domains = asyncio.run(server.call_tool("list_domains", {"active_only": False, "inactive_only": False}))
     assert "error" not in domains
     assert "items" in domains

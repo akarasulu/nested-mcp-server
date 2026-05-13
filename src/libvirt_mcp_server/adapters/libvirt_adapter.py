@@ -505,6 +505,27 @@ class LibvirtAdapter:
             **self._parse_storage_volume_metadata_xml(root),
         }
 
+    def get_storage_metadata_update_capabilities(self, uri: str) -> dict[str, Any]:
+        self._connect(uri)
+        pool_methods = set(dir(libvirt.virStoragePool)) if libvirt is not None and hasattr(libvirt, "virStoragePool") else set()
+        volume_methods = set(dir(libvirt.virStorageVol)) if libvirt is not None and hasattr(libvirt, "virStorageVol") else set()
+        pool_support = "setMetadata" in pool_methods
+        volume_support = "setMetadata" in volume_methods
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uri": uri,
+            "pool_metadata_update_supported": pool_support,
+            "volume_metadata_update_supported": volume_support,
+            "safe_update_supported": pool_support or volume_support,
+            "pool_methods": sorted(method for method in pool_methods if "Metadata" in method),
+            "volume_methods": sorted(method for method in volume_methods if "Metadata" in method),
+            "reason": (
+                "libvirt-python exposes no virStoragePool/virStorageVol setMetadata API; "
+                "this server will not mutate storage metadata by redefining XML"
+            ),
+        }
+
     def get_network(self, uri: str, network_name: str) -> dict[str, Any]:
         conn = self._connect(uri)
         try:

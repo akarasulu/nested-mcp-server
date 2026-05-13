@@ -168,6 +168,18 @@ def test_get_storage_volume_metadata_parses_target_and_backing(monkeypatch):
     assert result["has_metadata"] is False
 
 
+def test_storage_metadata_update_capabilities_report_no_safe_api(monkeypatch):
+    adapter = LibvirtAdapter()
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: object())
+
+    result = adapter.get_storage_metadata_update_capabilities("qemu:///system")
+
+    assert result["safe_update_supported"] is False
+    assert result["pool_metadata_update_supported"] is False
+    assert result["volume_metadata_update_supported"] is False
+    assert "redefining XML" in result["reason"]
+
+
 class _DomainCreateFails:
     def snapshotCreateXML(self, _xml: str, _flags: int):
         raise RuntimeError("create-failed")

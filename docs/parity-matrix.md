@@ -81,7 +81,7 @@ This is a project coverage indicator, not Python line coverage. It reflects comp
 | Network | Host interfaces | Implemented | list_interfaces, get_interface, define_interface_xml, start_interface, stop_interface, undefine_interface | Add interface cloning and bridge management | P3 |
 | Network | Network filters | Implemented | list_nwfilters, get_nwfilter, define_nwfilter_xml, undefine_nwfilter | Add filter reference resolution and binding status | P3 |
 | Storage | Pool inspect and lifecycle | Implemented | list_storage_pools, get_storage_pool, get_storage_pool_xml, get_storage_pool_metadata, define_storage_pool_xml, start_storage_pool, destroy_storage_pool, undefine_storage_pool, set_storage_pool_autostart, refresh_storage_pool, build_storage_pool | Add type-specific settings | P1 |
-| Storage | Volume inspect and lifecycle | Implemented | list_storage_volumes, get_storage_volume, get_storage_volume_metadata, create_storage_volume_xml, delete_storage_volume, clone_storage_volume, resize_storage_volume, wipe_storage_volume, upload_storage_volume, download_storage_volume | Add mutable metadata update support only where libvirt exposes a safe update path | P1 |
+| Storage | Volume inspect and lifecycle | Implemented | list_storage_volumes, get_storage_volume, get_storage_volume_metadata, get_storage_metadata_update_capabilities, create_storage_volume_xml, delete_storage_volume, clone_storage_volume, resize_storage_volume, wipe_storage_volume, upload_storage_volume, download_storage_volume | Mutable storage metadata updates intentionally unsupported unless libvirt exposes a safe setMetadata API | P1 |
 | Storage | Linked clone management | Implemented | create_linked_clone_volume, get_volume_xml, get_volume_backing_chain | Add parent resolution by volume identity, rebase/commit chain workflows | P1 |
 | Host devices | Node device and passthrough management | Implemented | list_node_devices, get_node_device, detach_node_device, reattach_node_device | Add full MDEV/VFIO mediated device workflows | P2 |
 | Policy | Mutation and destructive controls | Implemented | allow_mutations, allow_define, allow_destructive, allowlists, test prefix checks, get_policy_scopes, MCP_ACTOR_ROLES, MCP_ROLE_TOOL_ALLOWLIST | Add richer identity-provider integration when transport exposes authenticated principals | P1 |
@@ -149,6 +149,6 @@ When a new feature ships:
 
 1. Scheduled backup policy and restore validation helpers.
 2. Process supervisor wrapper/resource view for always-on QMP event collection.
-3. Mutable storage metadata update support only where libvirt exposes a safe update path.
-4. Live NUMA reshaping only where libvirt/QEMU support it safely.
-5. Richer identity-provider integration when transport exposes authenticated principals.
+3. Live NUMA reshaping only where libvirt/QEMU support it safely.
+4. Richer identity-provider integration when transport exposes authenticated principals.
+5. Mutable storage metadata updates if libvirt later exposes a safe setMetadata API.

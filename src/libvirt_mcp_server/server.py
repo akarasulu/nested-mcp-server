@@ -156,6 +156,7 @@ class LibvirtMCPServer:
             "list_storage_volumes",
             "get_storage_volume",
             "get_storage_volume_metadata",
+            "get_storage_metadata_update_capabilities",
             "define_storage_pool_xml",
             "start_storage_pool",
             "destroy_storage_pool",
@@ -500,6 +501,12 @@ class LibvirtMCPServer:
                     pool_name=data.pool_name,
                     volume_name=data.volume_name,
                     hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_storage_metadata_update_capabilities":
+                result = storage_tools.get_storage_metadata_update_capabilities(
+                    self.config,
+                    self.libvirt_adapter,
+                    hypervisor_ref=args.get("hypervisor_ref"),
                 )
             elif tool_name == "define_storage_pool_xml":
                 data = StoragePoolDefineInput.model_validate(args)

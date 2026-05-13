@@ -37,6 +37,10 @@ class FakeLibvirtAdapter:
         self.last = ("get_storage_volume_metadata", uri, pool_name, volume_name)
         return {"source": "libvirt", "pool_name": pool_name, "volume_name": volume_name, "has_metadata": True}
 
+    def get_storage_metadata_update_capabilities(self, uri):
+        self.last = ("get_storage_metadata_update_capabilities", uri)
+        return {"source": "libvirt", "safe_update_supported": False}
+
     def upload_storage_volume(self, uri, pool_name, volume_name, source_path, *, offset, length):
         self.last = ("upload_storage_volume", uri, pool_name, volume_name, source_path, offset, length)
         return {
@@ -205,6 +209,17 @@ def test_get_storage_volume_metadata_is_readonly(config):
     assert result["has_metadata"] is True
     assert result["hypervisor_ref"] == "default"
     assert adapter.last == ("get_storage_volume_metadata", "qemu:///system", "pool0", "vol0")
+
+
+def test_get_storage_metadata_update_capabilities_is_readonly(config):
+    adapter = FakeLibvirtAdapter()
+    config.allow_mutations = False
+
+    result = storage_tools.get_storage_metadata_update_capabilities(config, adapter, hypervisor_ref=None)
+
+    assert result["safe_update_supported"] is False
+    assert result["hypervisor_ref"] == "default"
+    assert adapter.last == ("get_storage_metadata_update_capabilities", "qemu:///system")
 
 
 def test_create_linked_clone_volume_rejects_absolute_backing_when_relative_required(config):
