@@ -61,6 +61,8 @@ from libvirt_mcp_server.schemas import (
     QmpNbdServerStartInput,
     QmpObjectAddInput,
     QmpObjectDelInput,
+    QmpCollectEventsLoopInput,
+    QmpPruneEventsInput,
     QmpReplayEventsInput,
     SetAutostartInput,
     SetEmulatorPinInput,
@@ -171,6 +173,8 @@ class LibvirtMCPServer:
             "qmp_capabilities",
             "qmp_events",
             "qmp_replay_events",
+            "qmp_prune_events",
+            "qmp_collect_events_loop",
             # Typed QMP query tools
             "qmp_query_status",
             "qmp_query_version",
@@ -645,6 +649,27 @@ class LibvirtMCPServer:
                     event_types=data.event_types,
                     since=data.since,
                     limit=data.limit,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_prune_events":
+                data = QmpPruneEventsInput.model_validate(args)
+                result = qmp_tools.qmp_prune_events(
+                    self.config,
+                    retention_days=data.retention_days,
+                    max_records=data.max_records,
+                    dry_run=data.dry_run,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "qmp_collect_events_loop":
+                data = QmpCollectEventsLoopInput.model_validate(args)
+                result = await qmp_tools.qmp_collect_events_loop(
+                    self.config,
+                    self.qmp_adapter,
+                    domain_refs=data.domain_refs,
+                    event_types=data.event_types,
+                    iterations=data.iterations,
+                    interval_seconds=data.interval_seconds,
+                    timeout_seconds=data.timeout_seconds,
                     hypervisor_ref=data.hypervisor_ref,
                 )
             elif tool_name in {

@@ -54,6 +54,10 @@ def test_local_hypervisor_readonly_smoke():
     assert "error" not in replayed_events
     assert "items" in replayed_events
 
+    pruned_events = asyncio.run(server.call_tool("qmp_prune_events", {"dry_run": True}))
+    assert "error" not in pruned_events
+    assert "retained_count" in pruned_events
+
     domains = asyncio.run(server.call_tool("list_domains", {"active_only": False, "inactive_only": False}))
     assert "error" not in domains
     assert "items" in domains

@@ -40,6 +40,8 @@ def _config(*, allow_qmp: bool = True, allow_mutations: bool = False) -> ServerC
     cfg.allow_qmp = allow_qmp
     cfg.allow_mutations = allow_mutations
     cfg.qmp_event_log_path = "./qmp-events.log"
+    cfg.qmp_event_retention_days = 30
+    cfg.qmp_event_retention_max_records = 100000
     return cfg
 
 
@@ -201,6 +203,69 @@ def test_qmp_events_persist_and_replay(tmp_path: Path):
         )
         assert replay["total_count"] == 1
         assert replay["items"][0]["event"]["event"] == "BLOCK_JOB_COMPLETED"
+
+    asyncio.run(_run())
+
+
+def test_qmp_prune_events_applies_retention_and_limit(tmp_path: Path):
+    event_log = tmp_path / "qmp-events.log"
+    event_log.write_text(
+        "\n".join(
+            [
+                '{"domain_ref":"vm1","event":{"event":"OLD"},"source":"qmp","timestamp":"2020-01-01T00:00:00+00:00"}',
+                '{"domain_ref":"vm1","event":{"event":"NEW1"},"source":"qmp","timestamp":"2026-01-01T00:00:00+00:00"}',
+                '{"domain_ref":"vm1","event":{"event":"NEW2"},"source":"qmp","timestamp":"2026-01-02T00:00:00+00:00"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config = _config(allow_qmp=True)
+    config.qmp_event_log_path = str(event_log)
+
+    result = qmp_tools.qmp_prune_events(
+        config,
+        retention_days=3650,
+        max_records=1,
+        dry_run=False,
+        hypervisor_ref=None,
+    )
+
+    assert result["original_count"] == 3
+    assert result["retained_count"] == 1
+    assert "NEW2" in event_log.read_text(encoding="utf-8")
+
+
+def test_qmp_collect_events_loop_persists_each_run(tmp_path: Path):
+    async def _run():
+        event_log = tmp_path / "qmp-events.log"
+        adapter = MagicMock(spec=QMPAdapter)
+        adapter.collect_events = AsyncMock(
+            return_value={
+                "source": "qmp",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "domain_ref": "vm1",
+                "events": [{"event": "STOP"}],
+                "total_count": 1,
+            }
+        )
+        config = _config(allow_qmp=True)
+        config.qmp_event_log_path = str(event_log)
+
+        result = await qmp_tools.qmp_collect_events_loop(
+            config,
+            adapter,
+            domain_refs=["vm1"],
+            event_types=[],
+            iterations=2,
+            interval_seconds=0,
+            timeout_seconds=0.1,
+            hypervisor_ref=None,
+        )
+
+        assert result["total_count"] == 2
+        assert adapter.collect_events.call_count == 2
+        assert len(event_log.read_text(encoding="utf-8").splitlines()) == 2
 
     asyncio.run(_run())
 

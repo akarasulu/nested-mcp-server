@@ -57,6 +57,22 @@ class QmpReplayEventsInput(StrictModel):
     hypervisor_ref: str | None = Field(default=None, max_length=255)
 
 
+class QmpPruneEventsInput(StrictModel):
+    retention_days: int | None = Field(default=None, ge=0, le=3650)
+    max_records: int | None = Field(default=None, ge=1, le=10000000)
+    dry_run: bool = False
+    hypervisor_ref: str | None = Field(default=None, max_length=255)
+
+
+class QmpCollectEventsLoopInput(StrictModel):
+    domain_refs: list[str] = Field(min_length=1)
+    event_types: list[str] = Field(default_factory=list)
+    iterations: int = Field(default=1, ge=1, le=1000)
+    interval_seconds: float = Field(default=1.0, ge=0.0, le=3600.0)
+    timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    hypervisor_ref: str | None = Field(default=None, max_length=255)
+
+
 class NetworkRefInput(StrictModel):
     network_name: str = Field(min_length=1, max_length=255)
     hypervisor_ref: str | None = Field(default=None, max_length=255)

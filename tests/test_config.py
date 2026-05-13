@@ -27,6 +27,8 @@ def test_config_defaults(monkeypatch):
     assert cfg.allow_qmp is True
     assert "blockdev-backup" in cfg.qmp_mutation_allowlist
     assert "nbd-server-start" in cfg.qmp_mutation_allowlist
+    assert cfg.qmp_event_retention_days == 30
+    assert cfg.qmp_event_retention_max_records == 100000
 
 
 def test_config_parses_destructive_domain_allowlist(monkeypatch):

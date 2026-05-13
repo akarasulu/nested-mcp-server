@@ -551,6 +551,48 @@ async def qmp_replay_events(
     return _render(result)
 
 
+@app.tool(description="Apply QMP event retention to the persisted JSONL event log.")
+async def qmp_prune_events(
+    retention_days: int | None = None,
+    max_records: int | None = None,
+    dry_run: bool = False,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_prune_events",
+        {
+            "retention_days": retention_days,
+            "max_records": max_records,
+            "dry_run": dry_run,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Run a bounded QMP event collection loop for one or more domains.")
+async def qmp_collect_events_loop(
+    domain_refs: list[str],
+    event_types: list[str] | None = None,
+    iterations: int = 1,
+    interval_seconds: float = 1.0,
+    timeout_seconds: float = 2.0,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "qmp_collect_events_loop",
+        {
+            "domain_refs": domain_refs,
+            "event_types": event_types or [],
+            "iterations": iterations,
+            "interval_seconds": interval_seconds,
+            "timeout_seconds": timeout_seconds,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
 # ---------------------------------------------------------------------------
 # Typed QMP query tools
 # ---------------------------------------------------------------------------

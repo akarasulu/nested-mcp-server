@@ -63,6 +63,8 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
     assert "stop_qmp_nbd_backup" in tools
     assert "get_qmp_backup_status" in tools
     assert "qmp_replay_events" in tools
+    assert "qmp_prune_events" in tools
+    assert "qmp_collect_events_loop" in tools
     assert "get_policy_scopes" in tools
     assert len(tools) >= 20
 

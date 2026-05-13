@@ -24,6 +24,8 @@ def _config(*, allow_qmp: bool = True, allow_mutations: bool = False) -> ServerC
     cfg.allow_qmp = allow_qmp
     cfg.allow_mutations = allow_mutations
     cfg.qmp_event_log_path = "./qmp-events.log"
+    cfg.qmp_event_retention_days = 30
+    cfg.qmp_event_retention_max_records = 100000
     return cfg
 
 

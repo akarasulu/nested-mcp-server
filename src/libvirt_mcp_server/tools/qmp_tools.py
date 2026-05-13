@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
@@ -106,6 +107,88 @@ def qmp_replay_events(
         "items": sliced,
         "total_count": len(sliced),
         "event_log_path": str(event_log),
+    }
+
+
+def qmp_prune_events(
+    config: ServerConfig,
+    *,
+    retention_days: int | None,
+    max_records: int | None,
+    dry_run: bool,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_allowed(config)
+    event_log = Path(config.qmp_event_log_path)
+    keep_after = datetime.now(timezone.utc) - timedelta(days=retention_days if retention_days is not None else config.qmp_event_retention_days)
+    record_limit = max_records if max_records is not None else config.qmp_event_retention_max_records
+
+    records = _read_qmp_event_records(event_log)
+    retained = [record for record in records if _record_timestamp(record) is None or _record_timestamp(record) >= keep_after]
+    if len(retained) > record_limit:
+        retained = retained[-record_limit:]
+    removed_count = len(records) - len(retained)
+
+    if not dry_run:
+        event_log.parent.mkdir(parents=True, exist_ok=True)
+        event_log.write_text(
+            "".join(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n" for record in retained),
+            encoding="utf-8",
+        )
+
+    return {
+        "source": "qmp",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "event_log_path": str(event_log),
+        "dry_run": dry_run,
+        "retention_days": retention_days if retention_days is not None else config.qmp_event_retention_days,
+        "max_records": record_limit,
+        "original_count": len(records),
+        "retained_count": len(retained),
+        "removed_count": removed_count,
+    }
+
+
+async def qmp_collect_events_loop(
+    config: ServerConfig,
+    qmp_adapter: QMPAdapter,
+    *,
+    domain_refs: list[str],
+    event_types: list[str],
+    iterations: int,
+    interval_seconds: float,
+    timeout_seconds: float,
+    hypervisor_ref: str | None,
+) -> dict:
+    _ensure_qmp_allowed(config)
+    runs: list[dict] = []
+    total_events = 0
+    for index in range(iterations):
+        for domain_ref in domain_refs:
+            payload = await qmp_events(
+                config,
+                qmp_adapter,
+                domain_ref=domain_ref,
+                event_types=event_types,
+                since=None,
+                hypervisor_ref=hypervisor_ref,
+                timeout_seconds=timeout_seconds,
+            )
+            event_count = int(payload.get("total_count", len(payload.get("events", []))))
+            total_events += event_count
+            runs.append({"iteration": index + 1, "domain_ref": domain_ref, "event_count": event_count})
+        if index < iterations - 1 and interval_seconds > 0:
+            await asyncio.sleep(interval_seconds)
+    return {
+        "source": "qmp",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypervisor_ref": hypervisor_ref or "default",
+        "domain_refs": domain_refs,
+        "iterations": iterations,
+        "runs": runs,
+        "total_count": total_events,
+        "event_log_path": config.qmp_event_log_path,
     }
 
 
@@ -928,6 +1011,33 @@ def _append_qmp_events(config: ServerConfig, payload: dict) -> None:
                 "event": event,
             }
             handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _read_qmp_event_records(event_log: Path) -> list[dict]:
+    if not event_log.exists():
+        return []
+    records: list[dict] = []
+    for line in event_log.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
+
+
+def _record_timestamp(record: dict) -> datetime | None:
+    raw = record.get("timestamp")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _backup_plan_steps(

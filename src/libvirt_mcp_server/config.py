@@ -74,6 +74,8 @@ class ServerConfig:
     qmp_allowlist: set[str]
     qmp_mutation_allowlist: set[str]
     qmp_event_log_path: str
+    qmp_event_retention_days: int
+    qmp_event_retention_max_records: int
     test_resource_prefix: str
 
     audit_log_path: str
@@ -105,6 +107,8 @@ class ServerConfig:
                 "balloon,block-stream,block-job-cancel,block-job-pause,block-job-resume,block-job-complete,device_add,device_del,cpu-add,object-add,object-del,drive-mirror,blockdev-backup,nbd-server-start,nbd-server-add,nbd-server-remove,nbd-server-stop,block-dirty-bitmap-add,block-dirty-bitmap-remove,block-dirty-bitmap-clear,netdev_add,netdev_del,chardev-add,chardev-remove",
             )),
             qmp_event_log_path=os.getenv("MCP_QMP_EVENT_LOG_PATH", "./qmp-events.log"),
+            qmp_event_retention_days=_env_int("MCP_QMP_EVENT_RETENTION_DAYS", 30),
+            qmp_event_retention_max_records=_env_int("MCP_QMP_EVENT_RETENTION_MAX_RECORDS", 100000),
             test_resource_prefix=os.getenv("LIBVIRT_MCP_TEST_PREFIX", "mcp_test_"),
             audit_log_path=os.getenv("MCP_AUDIT_LOG_PATH", "./audit.log"),
             log_level=os.getenv("MCP_LOG_LEVEL", "INFO"),
@@ -129,6 +133,8 @@ class ServerConfig:
             "allow_uri_override": self.allow_uri_override,
             "allow_secret_read": self.allow_secret_read,
             "qmp_event_log_path": self.qmp_event_log_path,
+            "qmp_event_retention_days": self.qmp_event_retention_days,
+            "qmp_event_retention_max_records": self.qmp_event_retention_max_records,
             "test_resource_prefix": self.test_resource_prefix,
             "max_concurrent_operations": self.max_concurrent_operations,
         }
