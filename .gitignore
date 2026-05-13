@@ -23,6 +23,7 @@ htmlcov*/
 # Local runtime state
 audit.log
 *.log
+docs/codex-handoff.md
 
 # Editor and local agent configuration
 .vscode/

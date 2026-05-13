@@ -479,7 +479,7 @@ def test_define_destroy_parity_for_network_storage_and_domain():
 
         domain_numa = asyncio.run(server.call_tool("get_domain_numa_topology", {"domain_ref": domain_name}))
         assert "error" not in domain_numa
-        assert domain_numa["configured"] is True
+        assert domain_numa["numa_configured"] is True
         assert domain_numa["cells"][0]["memory_kb"] == 262144
     finally:
         for transfer_path in (upload_path, download_path):
