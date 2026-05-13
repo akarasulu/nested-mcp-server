@@ -157,3 +157,200 @@ def test_delete_snapshot_delete_failure_branch(monkeypatch):
         adapter.delete_domain_snapshot("qemu:///system", "vm", "snap1")
 
     assert exc.value.code == "SNAPSHOT_DELETE_FAILED"
+
+
+class _FakeStream:
+    def __init__(self, incoming: bytes = b""):
+        self.incoming = incoming
+        self.sent = bytearray()
+        self.finished = False
+        self.aborted = False
+
+    def send(self, data: bytes):
+        self.sent.extend(data)
+        return len(data)
+
+    def recv(self, size: int):
+        if not self.incoming:
+            return b""
+        chunk = self.incoming[:size]
+        self.incoming = self.incoming[size:]
+        return chunk
+
+    def finish(self):
+        self.finished = True
+
+    def abort(self):
+        self.aborted = True
+
+
+class _FakeVolumeForTransfer:
+    def __init__(self):
+        self.upload_args = None
+        self.download_args = None
+
+    def upload(self, stream, offset, length, flags):
+        self.upload_args = (stream, offset, length, flags)
+
+    def download(self, stream, offset, length, flags):
+        self.download_args = (stream, offset, length, flags)
+
+
+class _FakePoolForTransfer:
+    def __init__(self, volume):
+        self.volume = volume
+
+    def storageVolLookupByName(self, _name):
+        return self.volume
+
+
+class _FakeConnForTransfer:
+    def __init__(self, stream, volume):
+        self.stream = stream
+        self.volume = volume
+
+    def storagePoolLookupByName(self, _name):
+        return _FakePoolForTransfer(self.volume)
+
+    def newStream(self, _flags):
+        return self.stream
+
+
+def test_upload_storage_volume_streams_file(monkeypatch, tmp_path):
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"abcdef")
+    stream = _FakeStream()
+    volume = _FakeVolumeForTransfer()
+    conn = _FakeConnForTransfer(stream, volume)
+    adapter = LibvirtAdapter()
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+
+    result = adapter.upload_storage_volume(
+        "qemu:///system",
+        "pool",
+        "volume.raw",
+        str(source),
+        offset=2,
+        length=3,
+    )
+
+    assert result["status"] == "uploaded"
+    assert result["bytes_transferred"] == 3
+    assert bytes(stream.sent) == b"cde"
+    assert stream.finished is True
+    assert volume.upload_args[1:] == (2, 3, 0)
+
+
+def test_download_storage_volume_streams_to_file(monkeypatch, tmp_path):
+    target = tmp_path / "download.bin"
+    stream = _FakeStream(incoming=b"abcdef")
+    volume = _FakeVolumeForTransfer()
+    conn = _FakeConnForTransfer(stream, volume)
+    adapter = LibvirtAdapter()
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+
+    result = adapter.download_storage_volume(
+        "qemu:///system",
+        "pool",
+        "volume.raw",
+        str(target),
+        offset=1,
+        length=4,
+    )
+
+    assert result["status"] == "downloaded"
+    assert result["bytes_transferred"] == 4
+    assert target.read_bytes() == b"abcd"
+    assert stream.finished is True
+    assert volume.download_args[1:] == (1, 4, 0)
+
+
+def test_parse_host_numa_cells_from_capabilities():
+    adapter = LibvirtAdapter()
+    xml = """
+<capabilities>
+  <host>
+    <topology>
+      <cells num='1'>
+        <cell id='0'>
+          <memory unit='KiB'>2097152</memory>
+          <cpus num='2'>
+            <cpu id='0' socket_id='0' core_id='0' siblings='0-1'/>
+            <cpu id='1' socket_id='0' core_id='0' siblings='0-1'/>
+          </cpus>
+        </cell>
+      </cells>
+    </topology>
+  </host>
+</capabilities>
+"""
+    cells = adapter._parse_host_numa_cells(xml)
+    assert cells == [
+        {
+            "cell_id": 0,
+            "memory_kb": 2097152,
+            "cpus": [
+                {"id": 0, "socket_id": 0, "core_id": 0, "siblings": "0-1"},
+                {"id": 1, "socket_id": 0, "core_id": 0, "siblings": "0-1"},
+            ],
+            "cpu_count": 2,
+        }
+    ]
+
+
+def test_parse_domain_numa_xml():
+    adapter = LibvirtAdapter()
+    xml = """
+<domain>
+  <name>mcp_test_vm1</name>
+  <cpu>
+    <numa>
+      <cell id='0' cpus='0-1' memory='1024' unit='MiB'/>
+    </numa>
+  </cpu>
+</domain>
+"""
+    parsed = adapter._parse_domain_numa_xml(xml)
+    assert parsed["numa_configured"] is True
+    assert parsed["cells"] == [{"cell_id": 0, "cpus": "0-1", "memory_kb": 1048576, "unit": "KiB"}]
+
+
+class _FakeDomainForNuma:
+    def __init__(self):
+        self.defined_xml = None
+
+    def XMLDesc(self, _flags):
+        return """
+<domain type='kvm'>
+  <name>mcp_test_vm1</name>
+  <memory unit='KiB'>1048576</memory>
+  <vcpu>1</vcpu>
+</domain>
+"""
+
+
+class _FakeConnForNuma:
+    def __init__(self, domain):
+        self.domain = domain
+        self.defined_xml = None
+
+    def defineXML(self, xml):
+        self.defined_xml = xml
+        return self.domain
+
+
+def test_set_domain_numa_topology_redefines_domain_xml(monkeypatch):
+    adapter = LibvirtAdapter()
+    domain = _FakeDomainForNuma()
+    conn = _FakeConnForNuma(domain)
+    monkeypatch.setattr(adapter, "_connect", lambda _uri: conn)
+    monkeypatch.setattr(adapter, "_lookup_domain", lambda _conn, _ref: domain)
+
+    result = adapter.set_domain_numa_topology(
+        "qemu:///system",
+        "mcp_test_vm1",
+        [{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+    )
+
+    assert result["status"] == "numa_topology_updated"
+    assert "<numa><cell id=\"0\" cpus=\"0\" memory=\"1048576\" unit=\"KiB\" /></numa>" in conn.defined_xml

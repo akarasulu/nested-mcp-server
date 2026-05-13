@@ -85,6 +85,19 @@ class LibvirtAdapter:
             "capabilities_summary": self._summarize_capabilities(capabilities_xml),
         }
 
+    def get_host_numa_topology(self, uri: str) -> dict[str, Any]:
+        conn = self._connect(uri)
+        capabilities_xml = conn.getCapabilities()
+        cells = self._parse_host_numa_cells(capabilities_xml)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uri": uri,
+            "cells": cells,
+            "total_count": len(cells),
+            "numa_supported": bool(cells),
+        }
+
     def list_domains(
         self,
         uri: str,
@@ -129,6 +142,67 @@ class LibvirtAdapter:
             "xml": dom.XMLDesc(flags),
             "live": live,
             "inactive": inactive,
+        }
+
+    def get_domain_numa_topology(self, uri: str, domain_ref: str) -> dict[str, Any]:
+        conn = self._connect(uri)
+        dom = self._lookup_domain(conn, domain_ref)
+        xml = dom.XMLDesc(0)
+        parsed = self._parse_domain_numa_xml(xml)
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "domain_ref": domain_ref,
+            **parsed,
+        }
+
+    def set_domain_numa_topology(self, uri: str, domain_ref: str, cells: list[dict[str, Any]]) -> dict[str, Any]:
+        conn = self._connect(uri)
+        dom = self._lookup_domain(conn, domain_ref)
+        flags = 0
+        if libvirt is not None and hasattr(libvirt, "VIR_DOMAIN_XML_INACTIVE"):
+            flags = libvirt.VIR_DOMAIN_XML_INACTIVE
+        try:
+            xml = dom.XMLDesc(flags)
+            root = ET.fromstring(xml)
+            cpu = root.find("cpu")
+            if cpu is None:
+                cpu = ET.SubElement(root, "cpu")
+            for existing in list(cpu.findall("numa")):
+                cpu.remove(existing)
+            numa = ET.SubElement(cpu, "numa")
+            for cell in cells:
+                ET.SubElement(
+                    numa,
+                    "cell",
+                    id=str(cell["cell_id"]),
+                    cpus=str(cell["cpus"]),
+                    memory=str(cell["memory_kb"]),
+                    unit="KiB",
+                )
+            new_xml = ET.tostring(root, encoding="unicode")
+            defined = conn.defineXML(new_xml)
+        except Exception as exc:
+            raise MCPError(
+                code="DOMAIN_NUMA_UPDATE_FAILED",
+                message=f"Failed to update NUMA topology for domain '{domain_ref}'",
+                retryable=False,
+                details={"domain_ref": domain_ref, "source": "libvirt", "cause": str(exc)},
+            )
+        if defined is None:
+            raise MCPError(
+                code="DOMAIN_NUMA_UPDATE_FAILED",
+                message=f"libvirt did not return a domain after NUMA update for '{domain_ref}'",
+                retryable=False,
+                details={"domain_ref": domain_ref, "source": "libvirt"},
+            )
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "domain_ref": domain_ref,
+            "status": "numa_topology_updated",
+            "cells": self._normalize_domain_numa_cells(cells),
+            "total_count": len(cells),
         }
 
     def define_domain_xml(self, uri: str, domain_xml: str) -> dict[str, Any]:
@@ -636,6 +710,121 @@ class LibvirtAdapter:
             "pool_name": pool_name,
             "volume_name": volume_name,
             "status": "deleted",
+        }
+
+    def upload_storage_volume(
+        self,
+        uri: str,
+        pool_name: str,
+        volume_name: str,
+        source_path: str,
+        *,
+        offset: int = 0,
+        length: int,
+    ) -> dict[str, Any]:
+        conn = self._connect(uri)
+        stream = None
+        bytes_sent = 0
+        try:
+            pool = conn.storagePoolLookupByName(pool_name)
+            vol = pool.storageVolLookupByName(volume_name)
+            stream = conn.newStream(0)
+            vol.upload(stream, offset, length, 0)
+            remaining = length
+            with open(source_path, "rb") as handle:
+                handle.seek(offset)
+                while remaining > 0:
+                    chunk = handle.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    view = memoryview(chunk)
+                    while view:
+                        sent = stream.send(view.tobytes())
+                        if sent is None:
+                            sent = len(view)
+                        if sent <= 0:
+                            raise RuntimeError("libvirt stream send returned no progress")
+                        bytes_sent += sent
+                        remaining -= sent
+                        view = view[sent:]
+            stream.finish()
+        except Exception as exc:
+            if stream is not None:
+                try:
+                    stream.abort()
+                except Exception:
+                    pass
+            raise MCPError(
+                code="STORAGE_VOLUME_UPLOAD_FAILED",
+                message=f"Failed to upload data to volume '{volume_name}' in pool '{pool_name}'",
+                retryable=False,
+                details={"pool_name": pool_name, "volume_name": volume_name, "source": "libvirt", "cause": str(exc)},
+            )
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "source_path": source_path,
+            "offset": offset,
+            "length": length,
+            "bytes_transferred": bytes_sent,
+            "status": "uploaded",
+        }
+
+    def download_storage_volume(
+        self,
+        uri: str,
+        pool_name: str,
+        volume_name: str,
+        target_path: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> dict[str, Any]:
+        conn = self._connect(uri)
+        stream = None
+        bytes_received = 0
+        requested_length = 0 if length is None else length
+        try:
+            pool = conn.storagePoolLookupByName(pool_name)
+            vol = pool.storageVolLookupByName(volume_name)
+            stream = conn.newStream(0)
+            vol.download(stream, offset, requested_length, 0)
+            remaining = length
+            with open(target_path, "wb") as handle:
+                while remaining is None or remaining > 0:
+                    chunk_size = 1024 * 1024 if remaining is None else min(1024 * 1024, remaining)
+                    chunk = stream.recv(chunk_size)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    bytes_received += len(chunk)
+                    if remaining is not None:
+                        remaining -= len(chunk)
+            stream.finish()
+        except Exception as exc:
+            if stream is not None:
+                try:
+                    stream.abort()
+                except Exception:
+                    pass
+            raise MCPError(
+                code="STORAGE_VOLUME_DOWNLOAD_FAILED",
+                message=f"Failed to download data from volume '{volume_name}' in pool '{pool_name}'",
+                retryable=False,
+                details={"pool_name": pool_name, "volume_name": volume_name, "source": "libvirt", "cause": str(exc)},
+            )
+        return {
+            "source": "libvirt",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "target_path": target_path,
+            "offset": offset,
+            "length": length,
+            "bytes_transferred": bytes_received,
+            "status": "downloaded",
         }
 
     def list_domain_snapshots(self, uri: str, domain_ref: str) -> list[dict[str, Any]]:
@@ -2025,6 +2214,73 @@ class LibvirtAdapter:
             "autostart": autostart,
         }
 
+    def _parse_host_numa_cells(self, capabilities_xml: str) -> list[dict[str, Any]]:
+        try:
+            root = ET.fromstring(capabilities_xml)
+        except Exception:
+            return []
+        cells: list[dict[str, Any]] = []
+        for cell in root.findall("./host/topology/cells/cell"):
+            memory_el = cell.find("memory")
+            memory_kb = None
+            if memory_el is not None and memory_el.text:
+                try:
+                    memory_kb = int(memory_el.text.strip())
+                except ValueError:
+                    memory_kb = None
+            cpus: list[dict[str, Any]] = []
+            for cpu in cell.findall("./cpus/cpu"):
+                cpu_item: dict[str, Any] = {
+                    "id": _int_or_none(cpu.get("id")),
+                    "socket_id": _int_or_none(cpu.get("socket_id")),
+                    "core_id": _int_or_none(cpu.get("core_id")),
+                    "siblings": cpu.get("siblings"),
+                }
+                cpus.append(cpu_item)
+            cells.append(
+                {
+                    "cell_id": _int_or_none(cell.get("id")),
+                    "memory_kb": memory_kb,
+                    "cpus": cpus,
+                    "cpu_count": len(cpus),
+                }
+            )
+        return cells
+
+    def _parse_domain_numa_xml(self, domain_xml: str) -> dict[str, Any]:
+        try:
+            root = ET.fromstring(domain_xml)
+        except Exception:
+            return {"numa_configured": False, "cells": [], "total_count": 0, "parse_error": "invalid_domain_xml"}
+        cells: list[dict[str, Any]] = []
+        for cell in root.findall("./cpu/numa/cell"):
+            cells.append(
+                {
+                    "cell_id": _int_or_none(cell.get("id")),
+                    "cpus": cell.get("cpus"),
+                    "memory_kb": _memory_to_kib(cell.get("memory"), cell.get("unit")),
+                    "unit": "KiB",
+                }
+            )
+        numatune = root.find("numatune")
+        return {
+            "numa_configured": bool(cells),
+            "cells": cells,
+            "total_count": len(cells),
+            "numatune": ET.tostring(numatune, encoding="unicode") if numatune is not None else None,
+        }
+
+    def _normalize_domain_numa_cells(self, cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "cell_id": int(cell["cell_id"]),
+                "cpus": str(cell["cpus"]),
+                "memory_kb": int(cell["memory_kb"]),
+                "unit": "KiB",
+            }
+            for cell in cells
+        ]
+
     def _summarize_capabilities(self, capabilities_xml: str) -> dict[str, Any]:
         try:
             root = ET.fromstring(capabilities_xml)
@@ -2075,3 +2331,31 @@ class LibvirtAdapter:
             "machine_counts_by_arch": machine_counts,
             "machine_samples_by_arch": machine_samples,
         }
+
+
+def _int_or_none(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _memory_to_kib(value: str | None, unit: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        amount = int(value)
+    except ValueError:
+        return None
+    normalized = (unit or "KiB").lower()
+    if normalized in {"k", "kb", "kib", "kilobytes"}:
+        return amount
+    if normalized in {"m", "mb", "mib", "megabytes"}:
+        return amount * 1024
+    if normalized in {"g", "gb", "gib", "gigabytes"}:
+        return amount * 1024 * 1024
+    if normalized in {"b", "bytes"}:
+        return amount // 1024
+    return amount

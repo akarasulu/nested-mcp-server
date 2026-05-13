@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "nested-mcp-server"
 version = "0.1.0"
 description = "MCP server core for libvirt and QEMU/QMP"
-readme = "AGENTS.md"
+readme = "Readme.md"
 requires-python = ">=3.11"
 authors = [
   { name = "nested-mcp-server" }

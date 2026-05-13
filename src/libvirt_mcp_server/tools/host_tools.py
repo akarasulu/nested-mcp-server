@@ -64,6 +64,18 @@ def get_domain_capabilities(
     return payload
 
 
+def get_host_numa_topology(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_host_numa_topology(uri)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 def get_audit_log(
     config: ServerConfig,
     audit_log_path: str,
@@ -131,4 +143,3 @@ def get_qmp_policy(config: ServerConfig) -> dict:
             config.qmp_allowlist | (config.qmp_mutation_allowlist if config.allow_mutations else set())
         ),
     }
-

@@ -220,6 +220,18 @@ class SetMemoryInput(DomainRefInput):
     persistent: bool = True
 
 
+class NumaCellInput(StrictModel):
+    cell_id: int = Field(ge=0, le=1023)
+    cpus: str = Field(min_length=1, max_length=255)
+    memory_kb: int = Field(gt=0)
+
+
+class DomainNumaTopologyInput(DomainRefInput):
+    cells: list[NumaCellInput] = Field(min_length=1)
+    live: bool = False
+    persistent: bool = True
+
+
 # ---------------------------------------------------------------------------
 # QMP new family schemas
 # ---------------------------------------------------------------------------
@@ -304,6 +316,18 @@ class SetEmulatorPinInput(DomainRefInput):
 
 class StorageVolumeResizeInput(StorageVolumeRefInput):
     capacity_bytes: int = Field(gt=0)
+
+
+class StorageVolumeUploadInput(StorageVolumeRefInput):
+    source_path: str = Field(min_length=1, max_length=4096)
+    offset: int = Field(default=0, ge=0)
+    length: int | None = Field(default=None, gt=0)
+
+
+class StorageVolumeDownloadInput(StorageVolumeRefInput):
+    target_path: str = Field(min_length=1, max_length=4096)
+    offset: int = Field(default=0, ge=0)
+    length: int | None = Field(default=None, gt=0)
 
 
 # ---------------------------------------------------------------------------

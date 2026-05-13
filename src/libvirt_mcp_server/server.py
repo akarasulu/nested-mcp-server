@@ -23,6 +23,7 @@ from libvirt_mcp_server.schemas import (
     DomainDefineInput,
     DomainDiskRefInput,
     DomainInterfaceRefInput,
+    DomainNumaTopologyInput,
     DomainRefInput,
     DomainXmlInput,
     InterfaceDefineInput,
@@ -65,8 +66,10 @@ from libvirt_mcp_server.schemas import (
     StorageLinkedCloneCreateInput,
     StorageVolumeCloneInput,
     StorageVolumeCreateInput,
+    StorageVolumeDownloadInput,
     StorageVolumeRefInput,
     StorageVolumeResizeInput,
+    StorageVolumeUploadInput,
     NetworkDefineInput,
 )
 from libvirt_mcp_server.schemas import (
@@ -114,6 +117,7 @@ class LibvirtMCPServer:
     def list_tools(self) -> list[str]:
         return [
             "host_info",
+            "get_host_numa_topology",
             "list_hypervisors",
             "get_hypervisor",
             "list_domains",
@@ -144,6 +148,8 @@ class LibvirtMCPServer:
             "undefine_storage_pool",
             "create_storage_volume_xml",
             "create_linked_clone_volume",
+            "upload_storage_volume",
+            "download_storage_volume",
             "delete_storage_volume",
             "list_domain_snapshots",
             "create_domain_snapshot",
@@ -214,6 +220,8 @@ class LibvirtMCPServer:
             # Domain vCPU and memory tuning
             "set_domain_vcpus",
             "set_domain_memory",
+            "get_domain_numa_topology",
+            "set_domain_numa_topology",
             # Domain statistics
             "get_domain_stats",
             "get_domain_block_stats",
@@ -274,6 +282,12 @@ class LibvirtMCPServer:
         try:
             if tool_name == "host_info":
                 result = host_tools.host_info(
+                    self.config,
+                    self.libvirt_adapter,
+                    hypervisor_ref=args.get("hypervisor_ref"),
+                )
+            elif tool_name == "get_host_numa_topology":
+                result = host_tools.get_host_numa_topology(
                     self.config,
                     self.libvirt_adapter,
                     hypervisor_ref=args.get("hypervisor_ref"),
@@ -476,6 +490,30 @@ class LibvirtMCPServer:
                     format=data.format,
                     backing_format=data.backing_format,
                     relative_backing=data.relative_backing,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "upload_storage_volume":
+                data = StorageVolumeUploadInput.model_validate(args)
+                result = storage_tools.upload_storage_volume(
+                    self.config,
+                    self.libvirt_adapter,
+                    pool_name=data.pool_name,
+                    volume_name=data.volume_name,
+                    source_path=data.source_path,
+                    offset=data.offset,
+                    length=data.length,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "download_storage_volume":
+                data = StorageVolumeDownloadInput.model_validate(args)
+                result = storage_tools.download_storage_volume(
+                    self.config,
+                    self.libvirt_adapter,
+                    pool_name=data.pool_name,
+                    volume_name=data.volume_name,
+                    target_path=data.target_path,
+                    offset=data.offset,
+                    length=data.length,
                     hypervisor_ref=data.hypervisor_ref,
                 )
             elif tool_name == "delete_storage_volume":
@@ -1029,6 +1067,25 @@ class LibvirtMCPServer:
                     self.libvirt_adapter,
                     domain_ref=data.domain_ref,
                     memory_kb=data.memory_kb,
+                    live=data.live,
+                    persistent=data.persistent,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "get_domain_numa_topology":
+                data = DomainRefInput.model_validate(args)
+                result = domain_tools.get_domain_numa_topology(
+                    self.config,
+                    self.libvirt_adapter,
+                    domain_ref=data.domain_ref,
+                    hypervisor_ref=data.hypervisor_ref,
+                )
+            elif tool_name == "set_domain_numa_topology":
+                data = DomainNumaTopologyInput.model_validate(args)
+                result = domain_tools.set_domain_numa_topology(
+                    self.config,
+                    self.libvirt_adapter,
+                    domain_ref=data.domain_ref,
+                    cells=[cell.model_dump() for cell in data.cells],
                     live=data.live,
                     persistent=data.persistent,
                     hypervisor_ref=data.hypervisor_ref,

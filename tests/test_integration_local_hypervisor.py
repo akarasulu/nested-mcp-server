@@ -37,6 +37,10 @@ def test_local_hypervisor_readonly_smoke():
     cfg = ServerConfig.from_env()
     server = LibvirtMCPServer(config=cfg)
 
+    host_numa = asyncio.run(server.call_tool("get_host_numa_topology", {}))
+    assert "error" not in host_numa
+    assert "numa_supported" in host_numa
+
     host = asyncio.run(server.call_tool("host_info", {}))
     assert "error" not in host
     assert "capabilities_summary" in host
@@ -118,6 +122,10 @@ def test_domain_introspection():
     )
     assert "error" not in xml_live
     assert "xml" in xml_live
+
+    numa = asyncio.run(server.call_tool("get_domain_numa_topology", {"domain_ref": domain_ref}))
+    assert "error" not in numa
+    assert "configured" in numa
 
 
 def test_hypervisor_discovery():
@@ -346,11 +354,14 @@ def test_define_destroy_parity_for_network_storage_and_domain():
     stamp = str(int(time.time()))
     network_name = f"{test_prefix}it_net_{stamp}"
     pool_name = f"{test_prefix}it_pool_{stamp}"
-    volume_name = f"{test_prefix}it_vol_{stamp}.qcow2"
+    volume_name = f"{test_prefix}it_vol_{stamp}.raw"
     domain_name = f"{test_prefix}it_domain_{stamp}"
 
     bridge_name = f"virbr9{stamp[-3:]}"
     pool_dir = tempfile.mkdtemp(prefix=f"{test_prefix}pool_{stamp}_")
+    upload_path = os.path.join(tempfile.gettempdir(), f"{test_prefix}upload_{stamp}.bin")
+    download_path = os.path.join(tempfile.gettempdir(), f"{test_prefix}download_{stamp}.bin")
+    upload_payload = b"nested-mcp-storage-transfer"
 
     network_xml = (
         "<network>"
@@ -374,7 +385,7 @@ def test_define_destroy_parity_for_network_storage_and_domain():
         "<volume>"
         f"<name>{volume_name}</name>"
         "<capacity unit='bytes'>10485760</capacity>"
-        "<target><format type='qcow2'/></target>"
+        "<target><format type='raw'/></target>"
         "</volume>"
     )
     domain_xml = (
@@ -422,10 +433,60 @@ def test_define_destroy_parity_for_network_storage_and_domain():
         assert created_vol["volume_name"] == volume_name
         volume_created = True
 
+        with open(upload_path, "wb") as handle:
+            handle.write(upload_payload)
+        uploaded = asyncio.run(
+            server.call_tool(
+                "upload_storage_volume",
+                {"pool_name": pool_name, "volume_name": volume_name, "source_path": upload_path},
+            )
+        )
+        assert "error" not in uploaded
+        assert uploaded["bytes_transferred"] == len(upload_payload)
+
+        downloaded = asyncio.run(
+            server.call_tool(
+                "download_storage_volume",
+                {
+                    "pool_name": pool_name,
+                    "volume_name": volume_name,
+                    "target_path": download_path,
+                    "length": len(upload_payload),
+                },
+            )
+        )
+        assert "error" not in downloaded
+        assert downloaded["bytes_transferred"] == len(upload_payload)
+        with open(download_path, "rb") as handle:
+            assert handle.read() == upload_payload
+
         defined_domain = asyncio.run(server.call_tool("define_domain_xml", {"domain_xml": domain_xml}))
         assert "error" not in defined_domain
         domain_defined = True
+
+        updated_numa = asyncio.run(
+            server.call_tool(
+                "set_domain_numa_topology",
+                {
+                    "domain_ref": domain_name,
+                    "cells": [{"cell_id": 0, "cpus": "0", "memory_kb": 262144}],
+                },
+            )
+        )
+        assert "error" not in updated_numa
+        assert updated_numa["total_count"] == 1
+
+        domain_numa = asyncio.run(server.call_tool("get_domain_numa_topology", {"domain_ref": domain_name}))
+        assert "error" not in domain_numa
+        assert domain_numa["configured"] is True
+        assert domain_numa["cells"][0]["memory_kb"] == 262144
     finally:
+        for transfer_path in (upload_path, download_path):
+            try:
+                os.unlink(transfer_path)
+            except FileNotFoundError:
+                pass
+
         if domain_defined:
             asyncio.run(server.call_tool("undefine_domain", {"domain_ref": domain_name}))
 

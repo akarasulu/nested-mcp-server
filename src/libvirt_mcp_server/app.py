@@ -48,6 +48,12 @@ async def host_info(hypervisor_ref: str | None = None) -> str:
     return _render(result)
 
 
+@app.tool(description="Return host NUMA topology from libvirt capabilities.")
+async def get_host_numa_topology(hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool("get_host_numa_topology", {"hypervisor_ref": hypervisor_ref})
+    return _render(result)
+
+
 @app.tool(description="List all configured hypervisor endpoints and their connection health.")
 async def list_hypervisors() -> str:
     result = await _get_server().call_tool("list_hypervisors", {})
@@ -288,6 +294,52 @@ async def create_linked_clone_volume(
             "format": format,
             "backing_format": backing_format,
             "relative_backing": relative_backing,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Upload a local file into a storage volume. Restricted to test-prefixed names.")
+async def upload_storage_volume(
+    pool_name: str,
+    volume_name: str,
+    source_path: str,
+    offset: int = 0,
+    length: int | None = None,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "upload_storage_volume",
+        {
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "source_path": source_path,
+            "offset": offset,
+            "length": length,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Download a storage volume range into a safe local path.")
+async def download_storage_volume(
+    pool_name: str,
+    volume_name: str,
+    target_path: str,
+    offset: int = 0,
+    length: int | None = None,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "download_storage_volume",
+        {
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "target_path": target_path,
+            "offset": offset,
+            "length": length,
             "hypervisor_ref": hypervisor_ref,
         },
     )
@@ -925,6 +977,36 @@ async def set_domain_memory(
         {
             "domain_ref": domain_ref,
             "memory_kb": memory_kb,
+            "live": live,
+            "persistent": persistent,
+            "hypervisor_ref": hypervisor_ref,
+        },
+    )
+    return _render(result)
+
+
+@app.tool(description="Return configured guest NUMA topology for a domain.")
+async def get_domain_numa_topology(domain_ref: str, hypervisor_ref: str | None = None) -> str:
+    result = await _get_server().call_tool(
+        "get_domain_numa_topology",
+        {"domain_ref": domain_ref, "hypervisor_ref": hypervisor_ref},
+    )
+    return _render(result)
+
+
+@app.tool(description="Set persistent guest NUMA topology for a test-prefixed domain.")
+async def set_domain_numa_topology(
+    domain_ref: str,
+    cells: list[dict[str, int | str]],
+    live: bool = False,
+    persistent: bool = True,
+    hypervisor_ref: str | None = None,
+) -> str:
+    result = await _get_server().call_tool(
+        "set_domain_numa_topology",
+        {
+            "domain_ref": domain_ref,
+            "cells": cells,
             "live": live,
             "persistent": persistent,
             "hypervisor_ref": hypervisor_ref,

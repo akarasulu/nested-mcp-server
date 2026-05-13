@@ -39,12 +39,17 @@ def test_list_tools_contains_expected_entries(tmp_path: Path):
 
     tools = server.list_tools()
     assert "host_info" in tools
+    assert "get_host_numa_topology" in tools
     assert "qmp_events" in tools
     assert "define_domain_xml" in tools
+    assert "get_domain_numa_topology" in tools
+    assert "set_domain_numa_topology" in tools
     assert "define_network_xml" in tools
     assert "define_storage_pool_xml" in tools
     assert "create_storage_volume_xml" in tools
     assert "create_linked_clone_volume" in tools
+    assert "upload_storage_volume" in tools
+    assert "download_storage_volume" in tools
     assert len(tools) >= 20
 
 
@@ -128,6 +133,27 @@ def test_linked_clone_success_audit_includes_backing_details(tmp_path: Path, mon
             "validate_domain_xml",
         ),
         (
+            "get_host_numa_topology",
+            {},
+            "libvirt_mcp_server.tools.host_tools",
+            "get_host_numa_topology",
+        ),
+        (
+            "get_domain_numa_topology",
+            {"domain_ref": "vm1"},
+            "libvirt_mcp_server.tools.domain_tools",
+            "get_domain_numa_topology",
+        ),
+        (
+            "set_domain_numa_topology",
+            {
+                "domain_ref": "mcp_test_vm1",
+                "cells": [{"cell_id": 0, "cpus": "0", "memory_kb": 262144}],
+            },
+            "libvirt_mcp_server.tools.domain_tools",
+            "set_domain_numa_topology",
+        ),
+        (
             "update_domain_device_xml",
             {
                 "domain_ref": "vm1",
@@ -149,6 +175,18 @@ def test_linked_clone_success_audit_includes_backing_details(tmp_path: Path, mon
             {"pool_name": "pool0", "volume_name": "vol0"},
             "libvirt_mcp_server.tools.storage_tools",
             "get_volume_backing_chain",
+        ),
+        (
+            "upload_storage_volume",
+            {"pool_name": "pool0", "volume_name": "vol0", "source_path": "/tmp/payload.bin"},
+            "libvirt_mcp_server.tools.storage_tools",
+            "upload_storage_volume",
+        ),
+        (
+            "download_storage_volume",
+            {"pool_name": "pool0", "volume_name": "vol0", "target_path": "/tmp/download.bin"},
+            "libvirt_mcp_server.tools.storage_tools",
+            "download_storage_volume",
         ),
         (
             "get_audit_log",

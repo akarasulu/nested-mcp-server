@@ -351,6 +351,52 @@ def set_domain_memory(
     return payload
 
 
+def get_domain_numa_topology(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    domain_ref: str,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.get_domain_numa_topology(uri, domain_ref)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def set_domain_numa_topology(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    domain_ref: str,
+    cells: list[dict[str, Any]],
+    live: bool = False,
+    persistent: bool = True,
+    hypervisor_ref: str | None = None,
+) -> dict[str, Any]:
+    _ensure_mutations_allowed(config, tool_name="set_domain_numa_topology")
+    _ensure_domain_mutation_allowed(config, tool_name="set_domain_numa_topology", domain_ref=domain_ref)
+    _ensure_test_prefix(config, tool_name="set_domain_numa_topology", object_name=domain_ref)
+    if live:
+        raise MCPError(
+            code="NUMA_LIVE_UPDATE_UNSUPPORTED",
+            message="set_domain_numa_topology supports persistent domain XML updates only",
+            details={"tool_name": "set_domain_numa_topology", "domain_ref": domain_ref, "live": live},
+        )
+    if not persistent:
+        raise MCPError(
+            code="INVALID_NUMA_UPDATE",
+            message="persistent=true is required for set_domain_numa_topology",
+            details={"tool_name": "set_domain_numa_topology", "domain_ref": domain_ref, "persistent": persistent},
+        )
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.set_domain_numa_topology(uri, domain_ref, cells)
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    payload["live"] = live
+    payload["persistent"] = persistent
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Domain statistics
 # ---------------------------------------------------------------------------

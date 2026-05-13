@@ -463,6 +463,22 @@ def test_get_domain_capabilities_with_params(cfg_readonly):
     )
 
 
+def test_get_host_numa_topology_readonly(cfg_readonly):
+    adapter = _make_adapter(
+        get_host_numa_topology={
+            "source": "libvirt",
+            "timestamp": "t",
+            "cells": [{"cell_id": 0, "memory_kb": 1024, "cpus": [], "cpu_count": 0}],
+            "total_count": 1,
+            "numa_supported": True,
+        }
+    )
+    result = host_tools.get_host_numa_topology(cfg_readonly, adapter)
+    assert result["numa_supported"] is True
+    assert result["hypervisor_ref"] == "default"
+    adapter.get_host_numa_topology.assert_called_once_with(cfg_readonly.get_hypervisor_uri(None))
+
+
 # ---------------------------------------------------------------------------
 # Area 11: Domain vCPU and memory tuning
 # ---------------------------------------------------------------------------
@@ -522,3 +538,80 @@ def test_set_domain_memory_persistent_only(cfg_mutations):
     domain_tools.set_domain_memory(cfg_mutations, adapter, domain_ref="vm1", memory_kb=1048576, live=False, persistent=True)
     # flags: config(2) only
     adapter.set_memory.assert_called_once_with(cfg_mutations.get_hypervisor_uri(None), "vm1", 1048576, 2)
+
+
+def test_get_domain_numa_topology_readonly(cfg_readonly):
+    adapter = _make_adapter(
+        get_domain_numa_topology={
+            "source": "libvirt",
+            "timestamp": "t",
+            "domain_ref": "vm1",
+            "numa_configured": True,
+            "cells": [{"cell_id": 0, "cpus": "0-1", "memory_kb": 1048576}],
+            "total_count": 1,
+        }
+    )
+    result = domain_tools.get_domain_numa_topology(cfg_readonly, adapter, domain_ref="vm1")
+    assert result["numa_configured"] is True
+    assert result["hypervisor_ref"] == "default"
+    adapter.get_domain_numa_topology.assert_called_once_with(cfg_readonly.get_hypervisor_uri(None), "vm1")
+
+
+def test_set_domain_numa_topology_blocked_when_mutations_off(cfg_readonly):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_topology(
+            cfg_readonly,
+            adapter,
+            domain_ref="mcp_test_vm1",
+            cells=[{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+        )
+    assert exc.value.code == "MUTATION_DISABLED"
+    adapter.set_domain_numa_topology.assert_not_called()
+
+
+def test_set_domain_numa_topology_requires_test_prefix(cfg_mutations):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_topology(
+            cfg_mutations,
+            adapter,
+            domain_ref="prod_vm1",
+            cells=[{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+        )
+    assert exc.value.code == "TEST_PREFIX_REQUIRED"
+
+
+def test_set_domain_numa_topology_rejects_live_update(cfg_mutations):
+    adapter = MagicMock()
+    with pytest.raises(MCPError) as exc:
+        domain_tools.set_domain_numa_topology(
+            cfg_mutations,
+            adapter,
+            domain_ref="mcp_test_vm1",
+            cells=[{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+            live=True,
+        )
+    assert exc.value.code == "NUMA_LIVE_UPDATE_UNSUPPORTED"
+
+
+def test_set_domain_numa_topology_allowed(cfg_mutations):
+    adapter = _make_adapter(
+        set_domain_numa_topology={
+            "source": "libvirt",
+            "timestamp": "t",
+            "domain_ref": "mcp_test_vm1",
+            "status": "numa_topology_updated",
+            "cells": [{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+            "total_count": 1,
+        }
+    )
+    result = domain_tools.set_domain_numa_topology(
+        cfg_mutations,
+        adapter,
+        domain_ref="mcp_test_vm1",
+        cells=[{"cell_id": 0, "cpus": "0", "memory_kb": 1048576}],
+    )
+    assert result["status"] == "numa_topology_updated"
+    assert result["persistent"] is True
+    adapter.set_domain_numa_topology.assert_called_once()

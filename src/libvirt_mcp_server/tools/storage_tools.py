@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from libvirt_mcp_server.config import ServerConfig
@@ -241,6 +242,94 @@ def get_volume_backing_chain(
     return payload
 
 
+def upload_storage_volume(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    pool_name: str,
+    volume_name: str,
+    source_path: str,
+    offset: int = 0,
+    length: int | None = None,
+    hypervisor_ref: str | None = None,
+) -> dict:
+    _ensure_mutations_allowed(config, "upload_storage_volume")
+    _ensure_test_prefix(config, tool_name="upload_storage_volume", object_name=pool_name)
+    _ensure_test_prefix(config, tool_name="upload_storage_volume", object_name=volume_name)
+    safe_source = _validate_transfer_path(source_path, tool_name="upload_storage_volume", must_exist=True)
+    if safe_source.is_dir():
+        raise MCPError(
+            code="INVALID_TRANSFER_PATH",
+            message="source_path must be a file, not a directory",
+            details={"source_path": str(safe_source)},
+        )
+    source_size = safe_source.stat().st_size
+    if offset > source_size:
+        raise MCPError(
+            code="INVALID_TRANSFER_RANGE",
+            message="offset cannot exceed source file size",
+            details={"offset": offset, "source_size": source_size},
+        )
+    transfer_length = source_size - offset if length is None else length
+    if transfer_length <= 0:
+        raise MCPError(
+            code="INVALID_TRANSFER_RANGE",
+            message="upload length must be greater than zero",
+            details={"offset": offset, "length": length, "source_size": source_size},
+        )
+    if offset + transfer_length > source_size:
+        raise MCPError(
+            code="INVALID_TRANSFER_RANGE",
+            message="upload range exceeds source file size",
+            details={"offset": offset, "length": transfer_length, "source_size": source_size},
+        )
+
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.upload_storage_volume(
+        uri,
+        pool_name,
+        volume_name,
+        str(safe_source),
+        offset=offset,
+        length=transfer_length,
+    )
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
+def download_storage_volume(
+    config: ServerConfig,
+    libvirt_adapter: LibvirtAdapter,
+    *,
+    pool_name: str,
+    volume_name: str,
+    target_path: str,
+    offset: int = 0,
+    length: int | None = None,
+    hypervisor_ref: str | None = None,
+) -> dict:
+    safe_target = _validate_transfer_path(target_path, tool_name="download_storage_volume", must_exist=False)
+    if safe_target.exists() and safe_target.is_dir():
+        raise MCPError(
+            code="INVALID_TRANSFER_PATH",
+            message="target_path must be a file, not a directory",
+            details={"target_path": str(safe_target)},
+        )
+    safe_target.parent.mkdir(parents=True, exist_ok=True)
+
+    uri = config.get_hypervisor_uri(hypervisor_ref)
+    payload = libvirt_adapter.download_storage_volume(
+        uri,
+        pool_name,
+        volume_name,
+        str(safe_target),
+        offset=offset,
+        length=length,
+    )
+    payload["hypervisor_ref"] = hypervisor_ref or "default"
+    return payload
+
+
 
 def _ensure_mutations_allowed(config: ServerConfig, tool_name: str) -> None:
     if config.allow_mutations:
@@ -284,6 +373,34 @@ def _ensure_test_prefix(config: ServerConfig, *, tool_name: str, object_name: st
         message=f"Tool '{tool_name}' requires '{config.test_resource_prefix}' prefix (got '{object_name}')",
         details={"tool_name": tool_name, "object_name": object_name, "required_prefix": config.test_resource_prefix},
     )
+
+
+def _validate_transfer_path(path: str, *, tool_name: str, must_exist: bool) -> Path:
+    candidate = Path(path).expanduser()
+    try:
+        resolved = candidate.resolve(strict=must_exist)
+    except FileNotFoundError as exc:
+        raise MCPError(
+            code="TRANSFER_PATH_NOT_FOUND",
+            message=f"Path for tool '{tool_name}' was not found",
+            details={"tool_name": tool_name, "path": path, "cause": str(exc)},
+        )
+    except Exception as exc:
+        raise MCPError(
+            code="INVALID_TRANSFER_PATH",
+            message=f"Invalid path for tool '{tool_name}'",
+            details={"tool_name": tool_name, "path": path, "cause": str(exc)},
+        )
+
+    project_root = Path(__file__).resolve().parents[3]
+    allowed_roots = [Path("/tmp").resolve(), project_root]
+    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+        raise MCPError(
+            code="TRANSFER_PATH_DENIED",
+            message=f"Tool '{tool_name}' only allows transfer paths under /tmp or the project root",
+            details={"tool_name": tool_name, "path": str(resolved), "allowed_roots": [str(root) for root in allowed_roots]},
+        )
+    return resolved
 
 
 # ---------------------------------------------------------------------------

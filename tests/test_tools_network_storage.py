@@ -25,6 +25,32 @@ class FakeLibvirtAdapter:
         self.last = ("create_storage_volume_xml", uri, pool_name, volume_xml)
         return {"source": "libvirt", "status": "created", "pool_name": pool_name}
 
+    def upload_storage_volume(self, uri, pool_name, volume_name, source_path, *, offset, length):
+        self.last = ("upload_storage_volume", uri, pool_name, volume_name, source_path, offset, length)
+        return {
+            "source": "libvirt",
+            "status": "uploaded",
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "source_path": source_path,
+            "offset": offset,
+            "length": length,
+            "bytes_transferred": length,
+        }
+
+    def download_storage_volume(self, uri, pool_name, volume_name, target_path, *, offset, length):
+        self.last = ("download_storage_volume", uri, pool_name, volume_name, target_path, offset, length)
+        return {
+            "source": "libvirt",
+            "status": "downloaded",
+            "pool_name": pool_name,
+            "volume_name": volume_name,
+            "target_path": target_path,
+            "offset": offset,
+            "length": length,
+            "bytes_transferred": length or 0,
+        }
+
 
 @pytest.fixture
 def config():
@@ -172,3 +198,132 @@ def test_create_linked_clone_volume_allows_relative_backing(config):
     assert result["relative_backing"] is True
     assert "<backingStore>" in adapter.last[3]
     assert "../vda.qcow2" in adapter.last[3]
+
+
+def test_upload_storage_volume_requires_mutations(config, tmp_path):
+    config.allow_mutations = False
+    adapter = FakeLibvirtAdapter()
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"payload")
+
+    with pytest.raises(MCPError) as exc:
+        storage_tools.upload_storage_volume(
+            config,
+            adapter,
+            pool_name="mcp_test_pool",
+            volume_name="mcp_test_vol.raw",
+            source_path=str(source),
+            hypervisor_ref=None,
+        )
+
+    assert exc.value.code == "MUTATION_DISABLED"
+
+
+def test_upload_storage_volume_requires_prefixed_names(config, tmp_path):
+    adapter = FakeLibvirtAdapter()
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"payload")
+
+    with pytest.raises(MCPError) as exc:
+        storage_tools.upload_storage_volume(
+            config,
+            adapter,
+            pool_name="prod_pool",
+            volume_name="mcp_test_vol.raw",
+            source_path=str(source),
+            hypervisor_ref=None,
+        )
+
+    assert exc.value.code == "TEST_PREFIX_REQUIRED"
+
+
+def test_upload_storage_volume_rejects_unsafe_source_path(config):
+    adapter = FakeLibvirtAdapter()
+
+    with pytest.raises(MCPError) as exc:
+        storage_tools.upload_storage_volume(
+            config,
+            adapter,
+            pool_name="mcp_test_pool",
+            volume_name="mcp_test_vol.raw",
+            source_path="/etc/passwd",
+            hypervisor_ref=None,
+        )
+
+    assert exc.value.code == "TRANSFER_PATH_DENIED"
+
+
+def test_upload_storage_volume_computes_default_length(config, tmp_path):
+    adapter = FakeLibvirtAdapter()
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"abcdef")
+
+    result = storage_tools.upload_storage_volume(
+        config,
+        adapter,
+        pool_name="mcp_test_pool",
+        volume_name="mcp_test_vol.raw",
+        source_path=str(source),
+        offset=2,
+        hypervisor_ref=None,
+    )
+
+    assert result["status"] == "uploaded"
+    assert result["length"] == 4
+    assert adapter.last[-2:] == (2, 4)
+
+
+def test_upload_storage_volume_rejects_out_of_range(config, tmp_path):
+    adapter = FakeLibvirtAdapter()
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"abcdef")
+
+    with pytest.raises(MCPError) as exc:
+        storage_tools.upload_storage_volume(
+            config,
+            adapter,
+            pool_name="mcp_test_pool",
+            volume_name="mcp_test_vol.raw",
+            source_path=str(source),
+            offset=4,
+            length=4,
+            hypervisor_ref=None,
+        )
+
+    assert exc.value.code == "INVALID_TRANSFER_RANGE"
+
+
+def test_download_storage_volume_rejects_unsafe_target_path(config):
+    adapter = FakeLibvirtAdapter()
+
+    with pytest.raises(MCPError) as exc:
+        storage_tools.download_storage_volume(
+            config,
+            adapter,
+            pool_name="mcp_test_pool",
+            volume_name="mcp_test_vol.raw",
+            target_path="/etc/nested-mcp-download.bin",
+            hypervisor_ref=None,
+        )
+
+    assert exc.value.code == "TRANSFER_PATH_DENIED"
+
+
+def test_download_storage_volume_allows_tmp_target(config, tmp_path):
+    adapter = FakeLibvirtAdapter()
+    target = tmp_path / "download.bin"
+
+    result = storage_tools.download_storage_volume(
+        config,
+        adapter,
+        pool_name="mcp_test_pool",
+        volume_name="mcp_test_vol.raw",
+        target_path=str(target),
+        offset=1,
+        length=5,
+        hypervisor_ref=None,
+    )
+
+    assert result["status"] == "downloaded"
+    assert result["length"] == 5
+    assert adapter.last[-2:] == (1, 5)
