@@ -125,7 +125,7 @@ def test_domain_introspection():
 
     numa = asyncio.run(server.call_tool("get_domain_numa_topology", {"domain_ref": domain_ref}))
     assert "error" not in numa
-    assert "configured" in numa
+    assert "numa_configured" in numa
 
 
 def test_hypervisor_discovery():
@@ -356,6 +356,7 @@ def test_define_destroy_parity_for_network_storage_and_domain():
     pool_name = f"{test_prefix}it_pool_{stamp}"
     volume_name = f"{test_prefix}it_vol_{stamp}.raw"
     domain_name = f"{test_prefix}it_domain_{stamp}"
+    cfg.mutation_domain_allowlist.add(domain_name)
 
     bridge_name = f"virbr9{stamp[-3:]}"
     pool_dir = tempfile.mkdtemp(prefix=f"{test_prefix}pool_{stamp}_")
